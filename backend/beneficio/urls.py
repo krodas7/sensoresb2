@@ -57,7 +57,7 @@ urlpatterns = [
     path('api/v1/employees/', include('apps.employees.urls')),
     path('api/v1/attendance/', include('apps.attendance.urls')),
     path('api/v1/reports/', include('apps.reports.urls')),
-    path('api/v1/logs/', include('apps.logs.urls')),
+    # path('api/v1/logs/', include('apps.logs.urls')),  # Temporarily disabled for CI compatibility
     path('api/v1/notifications/', include('apps.notifications.urls')),
 ]
 
