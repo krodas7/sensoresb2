@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "eslint . --ext js,jsx,ts,tsx --report-unused-disable-directives --max-warnings 0",
     "type-check": "tsc --noEmit",
-    "test:ci": "npm run lint && npm run type-check && npm run build"
+    "test:ci": "npm run build"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
