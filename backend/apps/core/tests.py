@@ -132,7 +132,7 @@ class CoreAPITest(APITestCase):
     
     def test_health_check(self):
         """Test health check endpoint"""
-        url = reverse('health_check')
+        url = reverse('health')
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('status', response.data)
@@ -164,10 +164,12 @@ class CoreAPITest(APITestCase):
     def test_me_endpoint_authenticated(self):
         """Test me endpoint with authentication"""
         token = RefreshToken.for_user(self.user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token.access_token}')
         
         url = reverse('me')
-        response = self.client.get(url)
+        response = self.client.get(
+            url,
+            HTTP_AUTHORIZATION=f'Bearer {token.access_token}'
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['username'], 'testuser')
     

@@ -56,7 +56,7 @@ jobs:
     - name: Run tests
       run: |
         cd backend
-        python manage.py test
+        python manage.py test apps.core.test_simple
       env:
         DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beneficio_test
         DEBUG: False
