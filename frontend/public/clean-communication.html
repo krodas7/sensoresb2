@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpieza de Comunicación Frontend-Backend</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255,255,255,0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .status {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        .success { border-left: 5px solid #4CAF50; }
+        .error { border-left: 5px solid #f44336; }
+        .warning { border-left: 5px solid #ff9800; }
+        .info { border-left: 5px solid #2196F3; }
+        button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+            transition: transform 0.3s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .endpoint {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Limpieza de Comunicación Frontend-Backend</h1>
+        
+        <div class="status info">
+            <strong>📡 Estado de la Comunicación:</strong><br>
+            Esta página verificará y limpiará la comunicación entre el frontend y backend.
+        </div>
+
+        <div class="grid">
+            <div class="endpoint">
+                <h3>🌐 Frontend</h3>
+                <p>Puerto: 5173</p>
+                <p id="frontend-status">Verificando...</p>
+            </div>
+            <div class="endpoint">
+                <h3>⚙️ Backend</h3>
+                <p>Puerto: 8000</p>
+                <p id="backend-status">Verificando...</p>
+            </div>
+        </div>
+
+        <button onclick="checkCommunication()">
+            🔍 Verificar Comunicación
+        </button>
+
+        <button onclick="clearAllData()">
+            🧹 Limpiar Todo y Reiniciar
+        </button>
+
+        <button onclick="testEndpoints()">
+            🧪 Probar Endpoints
+        </button>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            console.log(message);
+        }
+
+        async function checkCommunication() {
+            log('🔍 Verificando comunicación frontend-backend...', 'info');
+            
+            // Verificar frontend
+            try {
+                const frontendResponse = await fetch('/');
+                if (frontendResponse.ok) {
+                    document.getElementById('frontend-status').textContent = '✅ Conectado';
+                    log('✅ Frontend funcionando correctamente', 'success');
+                } else {
+                    document.getElementById('frontend-status').textContent = '❌ Error';
+                    log('❌ Frontend con problemas', 'error');
+                }
+            } catch (error) {
+                document.getElementById('frontend-status').textContent = '❌ Sin conexión';
+                log(`❌ Frontend sin conexión: ${error.message}`, 'error');
+            }
+
+            // Verificar backend
+            try {
+                const backendResponse = await fetch('/api/v1/health/');
+                if (backendResponse.ok) {
+                    const data = await backendResponse.json();
+                    document.getElementById('backend-status').textContent = '✅ Conectado';
+                    log('✅ Backend funcionando correctamente', 'success');
+                    log(`📊 Backend status: ${data.status}`, 'info');
+                } else {
+                    document.getElementById('backend-status').textContent = '❌ Error';
+                    log('❌ Backend con problemas', 'error');
+                }
+            } catch (error) {
+                document.getElementById('backend-status').textContent = '❌ Sin conexión';
+                log(`❌ Backend sin conexión: ${error.message}`, 'error');
+            }
+        }
+
+        async function testEndpoints() {
+            log('🧪 Probando endpoints del backend...', 'info');
+            
+            const endpoints = [
+                { name: 'Health', url: '/api/v1/health/' },
+                { name: 'Sensors Status', url: '/api/v1/sensors/status/' },
+                { name: 'Sensors Latest', url: '/api/v1/sensors/latest/' },
+                { name: 'API Root', url: '/api/v1/' }
+            ];
+
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint.url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        log(`✅ ${endpoint.name}: OK`, 'success');
+                        log(`📊 ${endpoint.name} data: ${JSON.stringify(data).substring(0, 100)}...`, 'info');
+                    } else {
+                        log(`❌ ${endpoint.name}: ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    log(`❌ ${endpoint.name}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function clearAllData() {
+            log('🧹 Iniciando limpieza completa...', 'warning');
+            
+            // Limpiar localStorage
+            try {
+                localStorage.clear();
+                log('✅ LocalStorage limpiado', 'success');
+            } catch (error) {
+                log(`❌ Error limpiando localStorage: ${error.message}`, 'error');
+            }
+
+            // Limpiar sessionStorage
+            try {
+                sessionStorage.clear();
+                log('✅ SessionStorage limpiado', 'success');
+            } catch (error) {
+                log(`❌ Error limpiando sessionStorage: ${error.message}`, 'error');
+            }
+
+            // Limpiar Service Workers
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        await registration.unregister();
+                        log(`✅ Service Worker desregistrado: ${registration.scope}`, 'success');
+                    }
+                } catch (error) {
+                    log(`❌ Error desregistrando Service Workers: ${error.message}`, 'error');
+                }
+            }
+
+            // Limpiar Cache Storage
+            if ('caches' in window) {
+                try {
+                    const cacheNames = await caches.keys();
+                    for (let name of cacheNames) {
+                        await caches.delete(name);
+                        log(`✅ Cache eliminado: ${name}`, 'success');
+                    }
+                } catch (error) {
+                    log(`❌ Error eliminando cache: ${error.message}`, 'error');
+                }
+            }
+
+            log('🎉 Limpieza completada. Recargando página...', 'success');
+            
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        }
+
+        // Verificar comunicación al cargar la página
+        window.onload = () => {
+            checkCommunication();
+        };
+    </script>
+</body>
+</html>

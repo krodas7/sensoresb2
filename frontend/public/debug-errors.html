@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - Capturar Errores</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .error {
+            background: #ffebee;
+            border: 1px solid #f44336;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            color: #d32f2f;
+        }
+        .warning {
+            background: #fff3e0;
+            border: 1px solid #ff9800;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            color: #f57c00;
+        }
+        .info {
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            color: #1976d2;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        #log {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background: #f9f9f9;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐛 Debug - Capturar Errores</h1>
+        
+        <div class="info">
+            <strong>Instrucciones:</strong><br>
+            1. Haz clic en "Iniciar Captura"<br>
+            2. Ve a la página principal<br>
+            3. Haz clic en los elementos del sidebar<br>
+            4. Regresa aquí para ver los errores capturados
+        </div>
+
+        <button onclick="startCapture()">🎯 Iniciar Captura</button>
+        <button onclick="clearLog()">🧹 Limpiar Log</button>
+        <button onclick="goToMain()">🏠 Ir a Página Principal</button>
+
+        <div id="log"></div>
+    </div>
+
+    <script>
+        let isCapturing = false;
+        const log = document.getElementById('log');
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${timestamp}:</strong> ${message}`;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function startCapture() {
+            isCapturing = true;
+            addLog('🎯 Captura de errores iniciada', 'info');
+            
+            // Capturar errores de JavaScript
+            window.addEventListener('error', function(e) {
+                if (isCapturing) {
+                    addLog(`❌ Error: ${e.message} en ${e.filename}:${e.lineno}:${e.colno}`, 'error');
+                }
+            });
+
+            // Capturar promesas rechazadas
+            window.addEventListener('unhandledrejection', function(e) {
+                if (isCapturing) {
+                    addLog(`❌ Promesa rechazada: ${e.reason}`, 'error');
+                }
+            });
+
+            // Capturar warnings
+            const originalWarn = console.warn;
+            console.warn = function(...args) {
+                if (isCapturing) {
+                    addLog(`⚠️ Warning: ${args.join(' ')}`, 'warning');
+                }
+                originalWarn.apply(console, args);
+            };
+
+            // Capturar errores de console.error
+            const originalError = console.error;
+            console.error = function(...args) {
+                if (isCapturing) {
+                    addLog(`❌ Console Error: ${args.join(' ')}`, 'error');
+                }
+                originalError.apply(console, args);
+            };
+        }
+
+        function clearLog() {
+            log.innerHTML = '';
+            addLog('🧹 Log limpiado', 'info');
+        }
+
+        function goToMain() {
+            window.location.href = '/';
+        }
+
+        // Auto-iniciar captura
+        window.onload = () => {
+            addLog('🚀 Página de debug cargada', 'info');
+            startCapture();
+        };
+    </script>
+</body>
+</html>

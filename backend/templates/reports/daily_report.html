@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte Diario - {{ date }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            color: #333;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #059669;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h3 {
+            color: #059669;
+            margin-top: 0;
+        }
+        .metric {
+            display: inline-block;
+            margin: 10px 20px 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 3px;
+        }
+        .metric-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .metric-value {
+            font-size: 1.2em;
+            color: #059669;
+        }
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .table th, .table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Sistema de Beneficio de Café</h1>
+        <h2>Reporte Diario - {{ date }}</h2>
+    </div>
+
+    <div class="section">
+        <h3>🌡️ Temperaturas</h3>
+        <div class="metric">
+            <div class="metric-label">Lecturas Totales</div>
+            <div class="metric-value">{{ report_data.temperature.total_readings }}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Temperatura Promedio</div>
+            <div class="metric-value">{{ report_data.temperature.avg_temperature|floatformat:1 }}°C</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Sensores Activos</div>
+            <div class="metric-value">{{ report_data.temperature.sensors_active }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>🏭 Ocupación de Áreas</h3>
+        <div class="metric">
+            <div class="metric-label">Cambios de Estado</div>
+            <div class="metric-value">{{ report_data.occupation.total_changes }}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Áreas Ocupadas</div>
+            <div class="metric-value">{{ report_data.occupation.areas_occupied }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>👥 Asistencia</h3>
+        <div class="metric">
+            <div class="metric-label">Registros Totales</div>
+            <div class="metric-value">{{ report_data.attendance.total_records }}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Entradas</div>
+            <div class="metric-value">{{ report_data.attendance.check_ins }}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Salidas</div>
+            <div class="metric-value">{{ report_data.attendance.check_outs }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>☕ Lotes</h3>
+        <div class="metric">
+            <div class="metric-label">Lotes Creados</div>
+            <div class="metric-value">{{ report_data.lots.created_today }}</div>
+        </div>
+        <div class="metric">
+            <div class="metric-label">Peso Total (kg)</div>
+            <div class="metric-value">{{ report_data.lots.total_weight|floatformat:1 }}</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h3>📊 Resumen</h3>
+        <p>Este reporte fue generado automáticamente el {{ date }} a las {{ "now"|date:"H:i" }}.</p>
+        <p>Para más detalles, consulte el panel de administración del sistema.</p>
+    </div>
+</body>
+</html>
