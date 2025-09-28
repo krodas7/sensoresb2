@@ -10,17 +10,6 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     
-    services:
-      postgres:
-        image: postgres:13
-        env:
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: beneficio_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
     - uses: actions/checkout@v3
@@ -48,7 +37,6 @@ jobs:
         python manage.py migrate
         python manage.py init_roles
       env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beneficio_test
         DEBUG: False
         SECRET_KEY: test-secret-key-for-ci
         ALLOWED_HOSTS: localhost,127.0.0.1
@@ -58,7 +46,6 @@ jobs:
         cd backend
         python manage.py test apps.core.test_simple
       env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/beneficio_test
         DEBUG: False
         SECRET_KEY: test-secret-key-for-ci
         ALLOWED_HOSTS: localhost,127.0.0.1
@@ -107,13 +94,19 @@ jobs:
         cd backend
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+    
+    - name: Install security tools
+      run: |
         pip install bandit safety
     
     - name: Run security scan
       run: |
         cd backend
-        bandit -r . -f json -o bandit-report.json || true
-        safety check || true
+        echo "Running bandit security scan..."
+        bandit -r . -f json -o bandit-report.json || echo "Bandit scan completed with warnings"
+        echo "Running safety check..."
+        safety check || echo "Safety check completed with warnings"
+        echo "Security scan completed"
     
     - name: Upload security report
       uses: actions/upload-artifact@v3

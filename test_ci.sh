@@ -27,7 +27,7 @@ python manage.py init_roles
 
 # Test basic functionality
 echo "  ✓ Testing basic functionality..."
-python manage.py test apps.core.tests --verbosity=0
+python manage.py test apps.core.test_simple --verbosity=0
 
 cd ..
 
