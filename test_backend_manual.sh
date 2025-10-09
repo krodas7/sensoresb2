@@ -134,7 +134,7 @@ echo ""
 
 # Test 9: List Temperatures
 echo -e "${YELLOW}9. Testing List Temperatures...${NC}"
-TEMP_RESPONSE=$(curl -s -w "\n%{http_code}" "$BASE_URL/temperatures/" \
+TEMP_RESPONSE=$(curl -s -w "\n%{http_code}" "$BASE_URL/temperatures/readings/" \
   -H "Authorization: Bearer $TOKEN")
 HTTP_CODE=$(echo "$TEMP_RESPONSE" | tail -1)
 if [ "$HTTP_CODE" = "200" ]; then
