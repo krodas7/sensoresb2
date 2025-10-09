@@ -99,19 +99,19 @@ export default function Reports() {
   }
 
   const handleGenerateReport = async () => {
+    // Validate form first
+    if (!generateForm.parameters.start_date || !generateForm.parameters.end_date) {
+      toast.error('Por favor selecciona las fechas de inicio y fin')
+      return
+    }
+    
+    if (new Date(generateForm.parameters.start_date) > new Date(generateForm.parameters.end_date)) {
+      toast.error('La fecha de inicio debe ser anterior a la fecha de fin')
+      return
+    }
+    
     try {
       setGenerating(true)
-      
-      // Validate form
-      if (!generateForm.parameters.start_date || !generateForm.parameters.end_date) {
-        toast.error('Por favor selecciona las fechas de inicio y fin')
-        return
-      }
-      
-      if (new Date(generateForm.parameters.start_date) > new Date(generateForm.parameters.end_date)) {
-        toast.error('La fecha de inicio debe ser anterior a la fecha de fin')
-        return
-      }
       
       await generateReport(generateForm)
       toast.success('Reporte generado exitosamente')

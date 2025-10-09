@@ -315,7 +315,10 @@ export default function Fermentation() {
               
               <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => setEditingTank(tank)}
+                  onClick={() => {
+                    setEditingTank(tank)
+                    setShowModal(true)
+                  }}
                   className="flex-1 bg-blue-600 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-1"
                 >
                   <PencilIcon className="h-3 w-3" />
