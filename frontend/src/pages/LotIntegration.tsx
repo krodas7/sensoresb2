@@ -45,16 +45,31 @@ interface Lot {
   status: string
 }
 
+interface Pesaje {
+  id: string
+  ingresoId: string
+  pesoBruto: number
+  tara: number
+  pesoNeto: number
+  fecha: string
+  hora: string
+  operador: string
+  observaciones?: string
+}
+
 interface Integration {
   id: number
   name: string
   destination: string
   client: string
   date: string
-  status: 'draft' | 'completed'
+  status: 'draft' | 'completed' | 'weighing' | 'shipped'
   totalWeight: number // en quintales
   lots: Lot[]
   createdAt: string
+  pesajes: Pesaje[]
+  currentIngresoId?: string
+  pesoRegistrado: number // en lbs
 }
 
 export default function LotIntegration() {
@@ -71,6 +86,16 @@ export default function LotIntegration() {
   const [integrationClient, setIntegrationClient] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [integrationToDelete, setIntegrationToDelete] = useState<number | null>(null)
+  
+  // Estados para el sistema de pesaje
+  const [activeIntegration, setActiveIntegration] = useState<Integration | null>(null)
+  const [showPesajeModal, setShowPesajeModal] = useState(false)
+  const [pesajeForm, setPesajeForm] = useState({
+    pesoBruto: '',
+    tara: '',
+    observaciones: '',
+    operador: 'Operador 1'
+  })
 
   useEffect(() => {
     loadIntegrations()
@@ -154,7 +179,7 @@ export default function LotIntegration() {
       destination: integrationDestination,
       client: integrationClient,
       date: new Date().toISOString(),
-      status: 'draft',
+    status: 'draft',
       totalWeight: selectedLots.reduce((total, lot) => total + lot.peso_quintales, 0),
       lots: selectedLots,
       createdAt: new Date().toISOString()
@@ -191,9 +216,8 @@ export default function LotIntegration() {
   }
 
   const handleRegisterWeights = (integration: Integration) => {
-    // Redirigir a Shipping Weights con la integración seleccionada
-    localStorage.setItem('selectedIntegration', JSON.stringify(integration))
-    window.location.href = '/shipping-weights'
+    // Iniciar pesaje directamente en esta página
+    startWeighing(integration)
   }
 
   const handleDeleteIntegration = (id: number) => {
@@ -222,6 +246,137 @@ export default function LotIntegration() {
       setShowDeleteConfirm(false)
       setIntegrationToDelete(null)
     }
+  }
+
+  // Funciones para el sistema de pesaje
+  const startWeighing = (integration: Integration) => {
+    // Inicializar la integración con datos de pesaje si no los tiene
+    const integrationWithPesaje = {
+      ...integration,
+      status: 'weighing' as const,
+      pesajes: integration.pesajes || [],
+      pesoRegistrado: integration.pesoRegistrado || 0,
+      currentIngresoId: integration.currentIngresoId || integration.lots[0]?.lot_id
+    }
+    setActiveIntegration(integrationWithPesaje)
+    
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === integration.id ? integrationWithPesaje : i
+    )
+    saveIntegrations(updatedIntegrations)
+    setIntegrations(updatedIntegrations)
+  }
+
+  const addPesaje = () => {
+    if (!activeIntegration) return
+
+    const pesoBruto = parseFloat(pesajeForm.pesoBruto)
+    const tara = parseFloat(pesajeForm.tara)
+    
+    if (isNaN(pesoBruto) || isNaN(tara) || pesoBruto <= 0 || tara < 0) {
+      toast.error('Por favor ingresa valores válidos para peso bruto y tara')
+      return
+    }
+
+    const pesoNeto = pesoBruto - tara
+    const newPesaje: Pesaje = {
+      id: Date.now().toString(),
+      ingresoId: activeIntegration.currentIngresoId || '',
+      pesoBruto,
+      tara,
+      pesoNeto,
+      fecha: new Date().toISOString().split('T')[0],
+      hora: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      operador: pesajeForm.operador,
+      observaciones: pesajeForm.observaciones
+    }
+
+    const updatedPesajes = [...activeIntegration.pesajes, newPesaje]
+    const totalPesoRegistrado = updatedPesajes.reduce((sum, p) => sum + p.pesoNeto, 0)
+
+    const updatedIntegration = {
+      ...activeIntegration,
+      pesajes: updatedPesajes,
+      pesoRegistrado: totalPesoRegistrado
+    }
+
+    setActiveIntegration(updatedIntegration)
+    setPesajeForm({ pesoBruto: '', tara: '', observaciones: '', operador: 'Operador 1' })
+    setShowPesajeModal(false)
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    saveIntegrations(updatedIntegrations)
+    setIntegrations(updatedIntegrations)
+
+    toast.success('Pesaje agregado exitosamente')
+  }
+
+  const changeIngreso = (ingresoId: string) => {
+    if (!activeIntegration) return
+    
+      const updatedIntegration = {
+      ...activeIntegration,
+      currentIngresoId: ingresoId
+    }
+    setActiveIntegration(updatedIntegration)
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    saveIntegrations(updatedIntegrations)
+    setIntegrations(updatedIntegrations)
+  }
+
+  const finishWeighing = () => {
+    if (!activeIntegration) return
+
+    const updatedIntegration = {
+      ...activeIntegration,
+      status: 'shipped' as const
+    }
+    setActiveIntegration(null)
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    saveIntegrations(updatedIntegrations)
+    setIntegrations(updatedIntegrations)
+
+    toast.success('Pesaje finalizado exitosamente')
+  }
+
+  const cancelWeighing = () => {
+    if (!activeIntegration) return
+
+    const updatedIntegration = {
+      ...activeIntegration,
+      status: 'draft' as const,
+      pesajes: [],
+      pesoRegistrado: 0,
+      currentIngresoId: undefined
+    }
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    saveIntegrations(updatedIntegrations)
+    setIntegrations(updatedIntegrations)
+    setActiveIntegration(null)
+
+    toast.success('Pesaje cancelado')
+  }
+
+  const getProgressPercentage = () => {
+    if (!activeIntegration) return 0
+    const totalWeightLbs = activeIntegration.totalWeight * 100 // Convertir quintales a lbs
+    return Math.min((activeIntegration.pesoRegistrado / totalWeightLbs) * 100, 100)
   }
 
   const toggleLotSelection = (lot: Lot) => {
@@ -254,7 +409,7 @@ export default function LotIntegration() {
   ]
 
   if (loading) {
-    return (
+  return (
       <div className="p-6">
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
@@ -269,6 +424,174 @@ export default function LotIntegration() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">🔄 Integración de Lotes</h1>
         <p className="text-gray-600">Gestión de integraciones para envío de lotes catados</p>
         </div>
+
+      {/* Pesaje en Progreso */}
+      {activeIntegration && (
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-500 rounded-lg">
+                  <ScaleIcon className="h-6 w-6 text-white" />
+                </div>
+        <div>
+                  <h2 className="text-xl font-bold text-gray-900">⚖️ Pesaje en Progreso</h2>
+                  <p className="text-sm text-gray-600">Integración: {activeIntegration.name}</p>
+        </div>
+              </div>
+              <div className="flex gap-3">
+        <button
+                  onClick={finishWeighing}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
+        >
+                  <CheckIcon className="h-4 w-4" />
+                  Finalizar Pesaje
+        </button>
+                <button
+                  onClick={cancelWeighing}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 transition-colors"
+                >
+                  <XMarkIcon className="h-4 w-4" />
+                  Cancelar Pesaje
+                </button>
+              </div>
+            </div>
+
+            {/* Información de la integración */}
+            <div className="bg-white rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">Destino</p>
+                  <p className="font-semibold text-gray-900">{activeIntegration.destination}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Cliente</p>
+                  <p className="font-semibold text-gray-900">{activeIntegration.client}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Peso Total</p>
+                  <p className="font-semibold text-gray-900">{activeIntegration.totalWeight} qq</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Pesajes</p>
+                  <p className="font-semibold text-gray-900">{activeIntegration.pesajes.length}</p>
+                </div>
+              </div>
+              
+              {/* Selector de Ingreso */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Ingreso a Pesar
+                </label>
+                <select
+                  value={activeIntegration.currentIngresoId || ''}
+                  onChange={(e) => changeIngreso(e.target.value)}
+                  className="w-full md:w-64 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {activeIntegration.lots.map((lot) => (
+                    <option key={lot.lot_id} value={lot.lot_id}>
+                      {lot.numero_ingreso} - {lot.peso_quintales} qq
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Barra de Progreso */}
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Progreso del Pesaje</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {getProgressPercentage().toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-500"
+                    style={{ width: `${getProgressPercentage()}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Peso registrado: {activeIntegration.pesoRegistrado.toFixed(2)} lbs</span>
+                  <span>Total: {(activeIntegration.totalWeight * 100).toFixed(0)} lbs</span>
+                </div>
+              </div>
+
+              {/* Botón Agregar Pesaje */}
+              <div className="text-center">
+                <button
+                  onClick={() => setShowPesajeModal(true)}
+                  className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center gap-2 mx-auto transition-colors"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Agregar Pesaje
+                </button>
+              </div>
+            </div>
+
+            {/* Tabla de Pesajes */}
+            {activeIntegration.pesajes.length > 0 && (
+              <div className="bg-white rounded-lg overflow-hidden">
+                <h3 className="text-lg font-semibold text-gray-900 p-4 border-b border-gray-200">
+                  Historial de Pesajes
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Ingreso
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha/Hora
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Peso Bruto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tara
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Peso Neto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Operador
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {activeIntegration.pesajes.map((pesaje) => {
+                        const ingreso = activeIntegration.lots.find(l => l.lot_id === pesaje.ingresoId)
+                        return (
+                          <tr key={pesaje.id}>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {ingreso?.numero_ingreso || 'N/A'}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                              {pesaje.fecha} {pesaje.hora}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {pesaje.pesoBruto.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {pesaje.tara.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
+                              {pesaje.pesoNeto.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                              {pesaje.operador}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -393,12 +716,12 @@ export default function LotIntegration() {
                     <PlusIcon className="h-5 w-5" />
                     Nueva Integración
                   </button>
-                </div>
-              </div>
+            </div>
+          </div>
 
               {/* Lista de integraciones */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {filteredIntegrations.map((integration) => (
+            {filteredIntegrations.map((integration) => (
                   <div key={integration.id} className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow duration-300">
                     {/* Header */}
                     <div className="flex justify-between items-start mb-6">
@@ -425,7 +748,7 @@ export default function LotIntegration() {
                         >
                           <TrashIcon className="h-4 w-4" />
                         </button>
-                      </div>
+                    </div>
                     </div>
                     
                     {/* Información de la integración */}
@@ -435,7 +758,7 @@ export default function LotIntegration() {
                       <div>
                           <p className="text-sm text-gray-500">Destino</p>
                           <p className="font-semibold text-gray-900">{integration.destination}</p>
-                        </div>
+                      </div>
                       </div>
                       
                       <div className="flex items-center gap-3">
@@ -476,33 +799,33 @@ export default function LotIntegration() {
                                 <div>
                                 <p className="font-medium text-gray-900">{lot.numero_ingreso}</p>
                                 <p className="text-sm text-gray-500">{lot.catador} - {lot.tipo}</p>
+                                </div>
                               </div>
-                            </div>
                                 <div className="text-right">
                               <p className="font-semibold text-gray-900">{lot.peso_quintales} qq</p>
                               <p className="text-sm text-gray-500">{lot.estado}</p>
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                                </div>
+                          ))}
+                        </div>
+                  </div>
 
                     {/* Botones de acción */}
                     <div className="flex gap-3">
-                      <button 
+                    <button
                         onClick={() => handleViewDetails(integration)}
                         className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 rounded-xl hover:from-blue-700 hover:to-blue-800 flex items-center justify-center gap-2 shadow-lg transition-all duration-200"
                       >
                         <EyeIcon className="h-4 w-4" />
                         Ver Detalles
-                      </button>
-                      <button 
+                    </button>
+                    <button
                         onClick={() => handleRegisterWeights(integration)}
                         className="flex-1 bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-3 rounded-xl hover:from-green-700 hover:to-green-800 flex items-center justify-center gap-2 shadow-lg transition-all duration-200"
-                      >
+                    >
                         <ScaleIcon className="h-4 w-4" />
                         Registrar Pesos
-                      </button>
+                    </button>
                     </div>
                             </div>
                           ))}
@@ -518,13 +841,13 @@ export default function LotIntegration() {
                     <button
                     onClick={() => setShowModal(true)}
                     className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl hover:from-green-700 hover:to-green-800 flex items-center gap-2 mx-auto shadow-lg transition-all duration-200"
-                  >
+                    >
                     <PlusIcon className="h-5 w-5" />
                     Crear Primera Integración
                     </button>
-                </div>
+                  </div>
               )}
-          </div>
+                </div>
           )}
 
           {activeTab === 'commercial' && (
@@ -542,7 +865,7 @@ export default function LotIntegration() {
                         <div>
                           <h4 className="text-lg font-bold text-gray-900">{lot.numero_ingreso}</h4>
                           <p className="text-sm text-gray-500">ID: {lot.lot_id}</p>
-              </div>
+          </div>
                         <span className="px-3 py-1 rounded-full text-sm font-semibold bg-green-100 text-green-800">
                           {lot.estado}
                         </span>
@@ -552,11 +875,11 @@ export default function LotIntegration() {
                         <div>
                           <p className="text-sm text-gray-500">Peso</p>
                           <p className="font-semibold text-gray-900">{lot.peso_quintales} qq</p>
-                        </div>
+              </div>
                         <div>
                           <p className="text-sm text-gray-500">Tipo</p>
                           <p className="font-semibold text-gray-900">{lot.tipo}</p>
-                        </div>
+              </div>
                         <div>
                           <p className="text-sm text-gray-500">Catador</p>
                           <p className="font-semibold text-gray-900">{lot.catador}</p>
@@ -566,8 +889,8 @@ export default function LotIntegration() {
                           <p className="font-semibold text-gray-900">
                             {new Date(lot.fecha_catacion).toLocaleDateString()}
                           </p>
-                        </div>
-                      </div>
+            </div>
+          </div>
 
                       {lot.observaciones && (
                         <div className="mb-4 p-3 bg-gray-50 rounded-lg">
@@ -576,14 +899,14 @@ export default function LotIntegration() {
                           </p>
                         </div>
                       )}
-                    </div>
-                  ))}
-                </div>
+              </div>
+            ))}
+          </div>
               ) : (
                 <div className="text-center py-16">
                   <div className="p-4 bg-gray-100 rounded-full w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                     <BeakerIcon className="h-12 w-12 text-gray-400" />
-                  </div>
+          </div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">No hay lotes disponibles</h3>
                   <p className="text-gray-500 mb-6">No hay lotes catados aprobados disponibles para integración.</p>
                 </div>
@@ -598,8 +921,8 @@ export default function LotIntegration() {
               </div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">Analíticas de Integración</h3>
               <p className="text-gray-500">Próximamente: Gráficos y estadísticas de integraciones</p>
-            </div>
-          )}
+        </div>
+      )}
         </div>
       </div>
 
@@ -630,15 +953,15 @@ export default function LotIntegration() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Nombre de la Integración *
                   </label>
-                  <input
-                    type="text"
+                <input
+                  type="text"
                     required
                     value={integrationName}
                     onChange={(e) => setIntegrationName(e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Ej: Integración Premium 2025-01"
-                  />
-                </div>
+                />
+              </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -652,7 +975,7 @@ export default function LotIntegration() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Ej: Estados Unidos, Miami"
                   />
-                </div>
+              </div>
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -666,8 +989,8 @@ export default function LotIntegration() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
                     placeholder="Ej: Coffee Importers Inc."
                   />
-                </div>
-                </div>
+            </div>
+          </div>
 
               {/* Resumen de selección */}
               {selectedLots.length > 0 && (
@@ -676,14 +999,14 @@ export default function LotIntegration() {
                     Resumen de la Integración
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
+                <div>
                       <p className="text-sm text-green-700">Lotes Seleccionados</p>
                       <p className="text-2xl font-bold text-green-900">{selectedLots.length}</p>
-                    </div>
+                        </div>
                     <div>
                       <p className="text-sm text-green-700">Peso Total</p>
                       <p className="text-2xl font-bold text-green-900">{totalWeight} qq</p>
-                    </div>
+                        </div>
                 <div>
                       <p className="text-sm text-green-700">Fecha de Creación</p>
                       <p className="text-2xl font-bold text-green-900">{new Date().toLocaleDateString()}</p>
@@ -721,12 +1044,12 @@ export default function LotIntegration() {
                                   : 'border-gray-300'
                               }`}>
                                 {isSelected && <CheckIcon className="h-3 w-3 text-white" />}
-                              </div>
+                </div>
                               <div>
                                 <h5 className="font-semibold text-gray-900">{lot.numero_ingreso}</h5>
                                 <p className="text-sm text-gray-500">{lot.catador} - {lot.tipo}</p>
-                              </div>
-                            </div>
+            </div>
+          </div>
                             <div className="text-right">
                               <p className="font-bold text-gray-900">{lot.peso_quintales} qq</p>
                               <p className="text-sm text-gray-500">{lot.estado}</p>
@@ -741,14 +1064,14 @@ export default function LotIntegration() {
                     <BeakerIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay lotes disponibles</h3>
                     <p className="text-gray-500">No hay lotes catados aprobados para seleccionar.</p>
-                  </div>
-                )}
+        </div>
+      )}
               </div>
                 </div>
 
             <div className="flex justify-end gap-4 p-6 border-t border-gray-200">
-                  <button
-                onClick={() => {
+                          <button
+                  onClick={() => {
                   setShowModal(false)
                   setSelectedLots([])
                   setIntegrationName('')
@@ -758,14 +1081,110 @@ export default function LotIntegration() {
                 className="px-6 py-3 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-colors"
                   >
                     Cancelar
-                  </button>
-                  <button
+                          </button>
+                          <button
                 onClick={handleCreateIntegration}
                 disabled={selectedLots.length === 0 || !integrationName.trim() || !integrationDestination.trim() || !integrationClient.trim()}
                 className="px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:from-green-700 hover:to-green-800 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
+                          >
                     Crear Integración
+                          </button>
+                        </div>
+            </div>
+          </div>
+      )}
+
+      {/* Modal de Agregar Pesaje */}
+      {showPesajeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Agregar Pesaje</h3>
+                <button
+                  onClick={() => setShowPesajeModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); addPesaje(); }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Peso Bruto (lbs)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pesajeForm.pesoBruto}
+                    onChange={(e) => setPesajeForm({...pesajeForm, pesoBruto: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tara (lbs)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={pesajeForm.tara}
+                    onChange={(e) => setPesajeForm({...pesajeForm, tara: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Operador
+                  </label>
+                  <select
+                    value={pesajeForm.operador}
+                    onChange={(e) => setPesajeForm({...pesajeForm, operador: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="Operador 1">Operador 1</option>
+                    <option value="Operador 2">Operador 2</option>
+                    <option value="Operador 3">Operador 3</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observaciones (opcional)
+                  </label>
+                  <textarea
+                    value={pesajeForm.observaciones}
+                    onChange={(e) => setPesajeForm({...pesajeForm, observaciones: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={3}
+                    placeholder="Observaciones adicionales..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowPesajeModal(false)}
+                    className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
                   </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Agregar Pesaje
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
@@ -779,20 +1198,20 @@ export default function LotIntegration() {
               <div className="flex items-center gap-4 mb-4">
                 <div className="p-3 bg-red-100 rounded-full">
                   <ExclamationTriangleIcon className="h-8 w-8 text-red-600" />
-                </div>
-                <div>
+              </div>
+                        <div>
                   <h3 className="text-lg font-semibold text-gray-900">Confirmar eliminación</h3>
                   <p className="text-gray-600">Esta acción no se puede deshacer</p>
-                </div>
-              </div>
-              
+                        </div>
+                      </div>
+                      
               <p className="text-gray-700 mb-6">
                 ¿Estás seguro de que quieres eliminar esta integración? Los lotes volverán a estar disponibles para nuevas integraciones.
               </p>
               
               <div className="flex justify-end gap-4">
-                <button
-                  onClick={() => {
+                        <button
+                          onClick={() => {
                     setShowDeleteConfirm(false)
                     setIntegrationToDelete(null)
                   }}

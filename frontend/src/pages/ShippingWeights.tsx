@@ -94,6 +94,34 @@ interface PartidaPesaje {
   isCompleted: boolean
 }
 
+// Interfaces para el sistema de pesaje mejorado
+interface PesajeWeighing {
+  id: string
+  ingresoId: string
+  pesoBruto: number
+  tara: number
+  pesoNeto: number
+  fecha: string
+  hora: string
+  operador: string
+  observaciones?: string
+}
+
+interface IntegrationWeighing {
+  id: number
+  name: string
+  destination: string
+  client: string
+  date: string
+  status: 'draft' | 'completed' | 'weighing' | 'shipped'
+  totalWeight: number // en quintales
+  lots: IntegrationLot[]
+  createdAt: string
+  pesajes: PesajeWeighing[]
+  currentIngresoId?: string
+  pesoRegistrado: number // en lbs
+}
+
 interface IntegrationLot {
   id: number | string
   numero_ingreso: string
@@ -170,6 +198,18 @@ export default function ShippingWeights() {
   // Estado para historial de envíos
   const [shipmentHistory, setShipmentHistory] = useState<any[]>([])
   const [shipmentSearchTerm, setShipmentSearchTerm] = useState('')
+  
+  // Estados para el sistema de pesaje mejorado
+  const [activeIntegration, setActiveIntegration] = useState<IntegrationWeighing | null>(null)
+  const [showWeighingModal, setShowWeighingModal] = useState(false)
+  const [selectedPartidaForWeighing, setSelectedPartidaForWeighing] = useState<PartidaPesaje | null>(null)
+  const [weighingForm, setWeighingForm] = useState({
+    pesoBruto: '',
+    tara: '',
+    bultos: '',
+    observaciones: '',
+    operador: 'Operador 1'
+  })
   
   const { showSuccess, showError, showWarning, showInfo } = useNotifications()
 
@@ -1305,6 +1345,150 @@ export default function ShippingWeights() {
     })
   }
 
+  // Funciones para el sistema de pesaje mejorado
+  const startWeighing = (integration: IntegrationWeighing) => {
+    // Inicializar la integración con datos de pesaje si no los tiene
+    const integrationWithPesaje = {
+      ...integration,
+      status: 'weighing' as const,
+      pesajes: integration.pesajes || [],
+      pesoRegistrado: integration.pesoRegistrado || 0,
+      currentIngresoId: integration.currentIngresoId || integration.lots[0]?.id
+    }
+    setActiveIntegration(integrationWithPesaje)
+    
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === integration.id ? integrationWithPesaje : i
+    )
+    setIntegrations(updatedIntegrations)
+  }
+
+  const addWeighing = () => {
+    if (!selectedPartidaForWeighing) {
+      showError('Por favor selecciona una partida para pesar')
+      return
+    }
+
+    const pesoBruto = parseFloat(weighingForm.pesoBruto)
+    const tara = parseFloat(weighingForm.tara)
+    const bultos = parseInt(weighingForm.bultos)
+    
+    if (isNaN(pesoBruto) || isNaN(tara) || isNaN(bultos) || pesoBruto <= 0 || tara < 0 || bultos <= 0) {
+      showError('Por favor ingresa valores válidos para peso bruto, tara y bultos')
+      return
+    }
+
+    const pesoNeto = pesoBruto - tara
+    const newPesaje: Pesaje = {
+      id: Date.now(),
+      taraType: 'yute', // Por defecto, se puede cambiar después
+      taraWeight: tara / bultos, // Tara por bulto
+      bultosCount: bultos,
+      totalTaraWeight: tara,
+      grossWeight: pesoBruto,
+      netWeight: pesoNeto,
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().split(' ')[0].substring(0, 5),
+      operator: weighingForm.operador,
+      notes: weighingForm.observaciones,
+      createdAt: new Date()
+    }
+
+    // Actualizar la partida con el nuevo pesaje
+    const updatedPartidas = partidas.map(partida => {
+      if (partida.id === selectedPartidaForWeighing.id) {
+        const updatedPesajes = [...partida.pesajes, newPesaje]
+        const newPesoTotal = updatedPesajes.reduce((sum, pesaje) => sum + pesaje.netWeight, 0)
+        
+        return {
+          ...partida,
+          pesajes: updatedPesajes,
+          pesoTotalRegistrado: newPesoTotal,
+          isCompleted: newPesoTotal >= partida.pesoEsperado * 100 // Convertir quintales a libras
+        }
+      }
+      return partida
+    })
+
+    setPartidas(updatedPartidas)
+    setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1' })
+    setShowWeighingModal(false)
+    setSelectedPartidaForWeighing(null)
+
+    showSuccess(`Pesaje registrado: ${newPesaje.netWeight} lbs para la partida ${selectedPartidaForWeighing.numeroIngreso}`)
+  }
+
+  const changeIngreso = (ingresoId: string) => {
+    if (!activeIntegration) return
+    
+    const updatedIntegration = {
+      ...activeIntegration,
+      currentIngresoId: ingresoId
+    }
+    setActiveIntegration(updatedIntegration)
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    setIntegrations(updatedIntegrations)
+  }
+
+  const finishWeighing = () => {
+    if (!activeIntegration) return
+
+    const updatedIntegration = {
+      ...activeIntegration,
+      status: 'shipped' as const
+    }
+    setActiveIntegration(null)
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    setIntegrations(updatedIntegrations)
+
+    showSuccess('Pesaje finalizado exitosamente')
+  }
+
+  const cancelWeighing = () => {
+    if (!activeIntegration) return
+
+    const updatedIntegration = {
+      ...activeIntegration,
+      status: 'draft' as const,
+      pesajes: [],
+      pesoRegistrado: 0,
+      currentIngresoId: undefined
+    }
+
+    // Actualizar en el localStorage
+    const updatedIntegrations = integrations.map(i => 
+      i.id === activeIntegration.id ? updatedIntegration : i
+    )
+    setIntegrations(updatedIntegrations)
+    setActiveIntegration(null)
+
+    showSuccess('Pesaje cancelado')
+  }
+
+  const getProgressPercentage = () => {
+    if (partidas.length === 0) return 0
+    const totalExpectedWeight = partidas.reduce((sum, partida) => sum + (partida.pesoEsperado * 100), 0)
+    const totalRegisteredWeight = partidas.reduce((sum, partida) => sum + partida.pesoTotalRegistrado, 0)
+    return Math.min((totalRegisteredWeight / totalExpectedWeight) * 100, 100)
+  }
+
+  const getTotalRegisteredWeight = () => {
+    return partidas.reduce((sum, partida) => sum + partida.pesoTotalRegistrado, 0)
+  }
+
+  const getTotalExpectedWeight = () => {
+    return partidas.reduce((sum, partida) => sum + (partida.pesoEsperado * 100), 0)
+  }
+
 
   const handleClearIntegration = () => {
     setSelectedIntegration(null)
@@ -1437,7 +1621,7 @@ export default function ShippingWeights() {
           </h2>
           <div className="text-sm text-gray-500">
             Última actualización: {new Date().toLocaleString()}
-          </div>
+            </div>
         </div>
 
         {/* Métricas Principales */}
@@ -1448,12 +1632,12 @@ export default function ShippingWeights() {
               <div>
                 <p className="text-sm font-medium text-blue-600">Total Envíos</p>
                 <p className="text-2xl font-bold text-blue-900">{metrics.totalShipments}</p>
-              </div>
+                </div>
               <div className="p-3 bg-blue-200 rounded-full">
                 <TruckIcon className="h-6 w-6 text-blue-700" />
               </div>
-            </div>
-          </div>
+                </div>
+              </div>
 
           {/* Total de Quintales Enviados */}
           <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg p-4 border border-emerald-200">
@@ -1462,12 +1646,12 @@ export default function ShippingWeights() {
                 <p className="text-sm font-medium text-emerald-600">Quintales Enviados</p>
                 <p className="text-2xl font-bold text-emerald-900">{metrics.totalWeightSent.toFixed(2)} qq</p>
                 <p className="text-xs text-emerald-700">{(metrics.totalWeightSent * 100).toFixed(0)} lbs</p>
-              </div>
+                </div>
               <div className="p-3 bg-emerald-200 rounded-full">
                 <ScaleIcon className="h-6 w-6 text-emerald-700" />
-              </div>
-            </div>
-          </div>
+                </div>
+                </div>
+                </div>
 
           {/* Precisión Promedio */}
           <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
@@ -1478,12 +1662,12 @@ export default function ShippingWeights() {
                 <p className="text-xs text-amber-700">
                   {metrics.totalWeightDifference >= 0 ? '+' : ''}{metrics.totalWeightDifference.toFixed(2)} qq dif.
                 </p>
-              </div>
+          </div>
               <div className="p-3 bg-amber-200 rounded-full">
                 <CheckCircleIcon className="h-6 w-6 text-amber-700" />
               </div>
-            </div>
-          </div>
+                </div>
+      </div>
 
           {/* Reportes Generados */}
           <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
@@ -1492,7 +1676,7 @@ export default function ShippingWeights() {
                 <p className="text-sm font-medium text-purple-600">Reportes</p>
                 <p className="text-2xl font-bold text-purple-900">{savedReports.length}</p>
                 <p className="text-xs text-purple-700">Guardados</p>
-              </div>
+            </div>
               <div className="p-3 bg-purple-200 rounded-full">
                 <DocumentTextIcon className="h-6 w-6 text-purple-700" />
               </div>
@@ -1512,7 +1696,7 @@ export default function ShippingWeights() {
               <div className="space-y-3">
                 {metrics.topClients.map((client, index) => (
                   <div key={client.client} className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center">
+          <div className="flex items-center">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-3 ${
                         index === 0 ? 'bg-yellow-100 text-yellow-800' :
                         index === 1 ? 'bg-gray-100 text-gray-800' :
@@ -1520,16 +1704,16 @@ export default function ShippingWeights() {
                         'bg-blue-100 text-blue-800'
                       }`}>
                         {index + 1}
-                      </div>
+            </div>
                       <div>
                         <p className="font-medium text-gray-900">{client.client}</p>
                         <p className="text-sm text-gray-500">{client.shipments} envíos</p>
-                      </div>
-                    </div>
+            </div>
+          </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">{client.totalWeight.toFixed(2)} qq</p>
                       <p className="text-sm text-gray-500">{client.accuracy.toFixed(1)}% precisión</p>
-                    </div>
+            </div>
                   </div>
                 ))}
               </div>
@@ -1537,9 +1721,9 @@ export default function ShippingWeights() {
               <div className="text-center py-8 text-gray-500">
                 <UserIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
                 <p>No hay datos de clientes disponibles</p>
-              </div>
-            )}
           </div>
+        )}
+        </div>
 
           {/* Top Destinos */}
           <div className="bg-gray-50 rounded-lg p-4">
@@ -1551,7 +1735,7 @@ export default function ShippingWeights() {
               <div className="space-y-3">
                 {metrics.topDestinations.map((destination, index) => (
                   <div key={destination.destination} className="flex items-center justify-between bg-white rounded-lg p-3 border border-gray-200">
-                    <div className="flex items-center">
+          <div className="flex items-center">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mr-3 ${
                         index === 0 ? 'bg-yellow-100 text-yellow-800' :
                         index === 1 ? 'bg-gray-100 text-gray-800' :
@@ -1559,19 +1743,19 @@ export default function ShippingWeights() {
                         'bg-blue-100 text-blue-800'
                       }`}>
                         {index + 1}
-                      </div>
+            </div>
                       <div>
                         <p className="font-medium text-gray-900">{destination.destination}</p>
                         <p className="text-sm text-gray-500">{destination.shipments} envíos</p>
-                      </div>
-                    </div>
+            </div>
+          </div>
                     <div className="text-right">
                       <p className="font-semibold text-gray-900">{destination.totalWeight.toFixed(2)} qq</p>
                       <p className="text-sm text-gray-500">{destination.accuracy.toFixed(1)}% precisión</p>
-                    </div>
-                  </div>
+        </div>
+            </div>
                 ))}
-              </div>
+            </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
                 <TruckIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
@@ -1621,6 +1805,214 @@ export default function ShippingWeights() {
         </div>
       </div>
 
+      {/* Sistema de Pesaje con Partidas */}
+      {partidas.length > 0 && (
+        <div className="mb-8">
+          <div className="bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-200 rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-blue-500 rounded-lg">
+                  <ScaleIcon className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">⚖️ Sistema de Pesaje</h2>
+                  <p className="text-sm text-gray-600">Registro de pesajes por partidas</p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowWeighingModal(true)}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2 transition-colors"
+                >
+                  <PlusIcon className="h-4 w-4" />
+                  Nuevo Pesaje
+                </button>
+              </div>
+            </div>
+
+            {/* Información del progreso */}
+            <div className="bg-white rounded-lg p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-500">Total Partidas</p>
+                  <p className="font-semibold text-gray-900">{partidas.length}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Peso Esperado</p>
+                  <p className="font-semibold text-gray-900">{(getTotalExpectedWeight() / 100).toFixed(2)} qq</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Peso Registrado</p>
+                  <p className="font-semibold text-gray-900">{(getTotalRegisteredWeight() / 100).toFixed(2)} qq</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Progreso</p>
+                  <p className="font-semibold text-gray-900">{getProgressPercentage().toFixed(1)}%</p>
+                </div>
+              </div>
+              
+              {/* Barra de Progreso */}
+              <div className="mb-4">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">Progreso General del Pesaje</span>
+                  <span className="text-sm font-bold text-gray-900">
+                    {getProgressPercentage().toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3">
+                  <div 
+                    className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-500"
+                    style={{ width: `${getProgressPercentage()}%` }}
+                  ></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>Registrado: {(getTotalRegisteredWeight() / 100).toFixed(2)} qq</span>
+                  <span>Total: {(getTotalExpectedWeight() / 100).toFixed(2)} qq</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla de Partidas con Pesajes */}
+            <div className="bg-white rounded-lg overflow-hidden">
+              <h3 className="text-lg font-semibold text-gray-900 p-4 border-b border-gray-200">
+                Partidas y Pesajes Registrados
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Número de Partida
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Peso Esperado
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Peso Registrado
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Pesajes
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Estado
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {partidas.map((partida) => (
+                      <tr key={partida.id}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {partida.numeroIngreso}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {partida.pesoEsperado} qq
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {(partida.pesoTotalRegistrado / 100).toFixed(2)} qq
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                          {partida.pesajes.length}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            partida.isCompleted 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {partida.isCompleted ? 'Completada' : 'En Progreso'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                          <button
+                            onClick={() => {
+                              setSelectedPartidaForWeighing(partida)
+                              setShowWeighingModal(true)
+                            }}
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            Agregar Pesaje
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Tabla detallada de pesajes */}
+            {partidas.some(p => p.pesajes.length > 0) && (
+              <div className="bg-white rounded-lg overflow-hidden mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 p-4 border-b border-gray-200">
+                  Detalle de Pesajes por Partida
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Partida
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Fecha/Hora
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Peso Bruto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Bultos
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Tara
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Peso Neto
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Operador
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {partidas.flatMap(partida => 
+                        partida.pesajes.map(pesaje => (
+                          <tr key={pesaje.id}>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {partida.numeroIngreso}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                              {pesaje.date} {pesaje.time}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {pesaje.grossWeight.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {pesaje.bultosCount}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {pesaje.totalTaraWeight.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-600">
+                              {pesaje.netWeight.toFixed(2)} lbs
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                              {pesaje.operator}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tabs Navigation */}
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex space-x-8">
@@ -1632,7 +2024,7 @@ export default function ShippingWeights() {
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
-            <div className="flex items-center">
+          <div className="flex items-center">
               <LinkIcon className="h-5 w-5 mr-2" />
               Integración de Lotes
             </div>
@@ -1661,7 +2053,7 @@ export default function ShippingWeights() {
             <div className="flex items-center">
               <ChartBarIcon className="h-4 w-4 mr-2" />
               Reportes Guardados
-            </div>
+          </div>
           </button>
         </nav>
       </div>
@@ -1670,11 +2062,11 @@ export default function ShippingWeights() {
       {activeTab === 'integrations' && (
         <>
           {/* Selector de Integración */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">
             Integración de Lotes
-          </h2>
+            </h2>
           <div className="flex items-center gap-2">
             {selectedIntegration && (
             <button 
@@ -1729,11 +2121,11 @@ export default function ShippingWeights() {
                     </h4>
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                       lot.estado === 'Aprobado' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-yellow-100 text-yellow-800'
-                    }`}>
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-yellow-100 text-yellow-800'
+              }`}>
                       {lot.estado}
-                  </span>
+              </span>
                 </div>
                   <div className="space-y-1 text-sm text-gray-600">
                     <div className="flex justify-between">
@@ -1759,7 +2151,7 @@ export default function ShippingWeights() {
 
             {/* Botón para comenzar pesaje */}
             <div className="flex justify-center">
-                    <button 
+              <button
                 onClick={() => {
                   console.log('🔘 Botón Comenzar Pesaje clickeado')
                   handleStartWeighing()
@@ -1768,7 +2160,7 @@ export default function ShippingWeights() {
               >
                 <ScaleIcon className="h-5 w-5 mr-2" />
                 Comenzar Pesaje
-                    </button>
+              </button>
             </div>
           </div>
         ) : isWeighing && selectedIntegration ? (
@@ -1784,7 +2176,7 @@ export default function ShippingWeights() {
                   <p className="text-sm text-blue-700 mt-1">
                     Integración: <strong>{selectedIntegration.name}</strong>
                   </p>
-                </div>
+              </div>
                 <div className="flex space-x-2">
                   <button
                     onClick={handleFinishWeighing}
@@ -1800,7 +2192,7 @@ export default function ShippingWeights() {
                     <XMarkIcon className="h-4 w-4 mr-1" />
                     Cancelar Pesaje
                   </button>
-                </div>
+            </div>
               </div>
             </div>
 
@@ -1810,7 +2202,7 @@ export default function ShippingWeights() {
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Destino</p>
                   <p className="font-semibold text-gray-900">{selectedIntegration.destination}</p>
-                </div>
+              </div>
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Cliente</p>
                   <p className="font-semibold text-gray-900">{selectedIntegration.client}</p>
@@ -1822,9 +2214,9 @@ export default function ShippingWeights() {
                 <div className="text-center">
                   <p className="text-sm text-gray-600">Pesajes</p>
                   <p className="font-semibold text-gray-900">{weighingData.length}</p>
-                </div>
-              </div>
-              
+            </div>
+          </div>
+          
               <div className="mt-4 pt-4 border-t border-gray-200 text-center">
                 <p className="text-sm text-gray-600">
                   Peso registrado: <span className="font-medium">
@@ -1846,10 +2238,10 @@ export default function ShippingWeights() {
                     <PlusIcon className="h-4 w-4 mr-1" />
                     Agregar Pesaje
                   </button>
-                </div>
-              </div>
+            </div>
             </div>
           </div>
+        </div>
         ) : (
           <div className="text-center py-8">
             <LinkIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
@@ -1866,122 +2258,12 @@ export default function ShippingWeights() {
               <LinkIcon className="h-4 w-4 mr-2" />
               Seleccionar Integración
             </button>
-          </div>
-        )}
-      </div>
-
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <ClipboardDocumentListIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Integraciones</p>
-              <p className="text-2xl font-bold text-gray-900">{summary.totalLotes}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckBadgeIcon className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Integraciones Completadas</p>
-              <p className="text-2xl font-bold text-gray-900">{summary.completedLotes}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <CubeIcon className="h-6 w-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Partidas</p>
-              <p className="text-2xl font-bold text-gray-900">{summary.totalPartidas}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-orange-100 rounded-lg">
-              <ScaleIcon className="h-6 w-6 text-orange-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Peso Neto Total</p>
-              <p className="text-2xl font-bold text-gray-900">{summary.totalNetWeight} lbs</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Current Lote Status */}
-      {currentLote && (
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">
-              Lote Actual: {currentLote.loteNumber}
-            </h2>
-            <div className="flex items-center space-x-2">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                currentLote.isCompleted 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}>
-                {currentLote.isCompleted ? 'Completado' : 'En Progreso'}
-              </span>
-              <button
-                onClick={() => setSelectedLote(currentLote)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <EyeIcon className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-gray-50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-600">Peso Objetivo</span>
-                <span className="text-lg font-bold text-gray-900">{currentLote.totalWeight} qq</span>
-              </div>
-            </div>
-            <div className="bg-blue-50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-blue-600">Peso Actual</span>
-                <span className="text-lg font-bold text-blue-900">{currentLote.currentWeight.toFixed(2)} qq</span>
-              </div>
-            </div>
-            <div className="bg-purple-50 rounded-lg p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-purple-600">Partidas</span>
-                <span className="text-lg font-bold text-purple-900">{currentLote.partidas.length}</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="mt-4">
-            <div className="flex justify-between text-sm text-gray-600 mb-1">
-              <span>Progreso del Lote</span>
-              <span>{((currentLote.currentWeight / currentLote.totalWeight) * 100).toFixed(1)}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
-                className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${Math.min((currentLote.currentWeight / currentLote.totalWeight) * 100, 100)}%` }}
-              ></div>
-            </div>
-          </div>
         </div>
       )}
+      </div>
+
+
+
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2047,45 +2329,6 @@ export default function ShippingWeights() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="card">
-        <div className="flex flex-col lg:flex-row gap-4">
-          <div className="flex-1 relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por número de lote..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input pl-10"
-            />
-          </div>
-          <div className="flex gap-4">
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="input w-48"
-            />
-            <select 
-              value={currentLote?.id || ''}
-              onChange={(e) => {
-                const loteId = parseInt(e.target.value)
-                const lote = lotes.find(l => l.id === loteId)
-                setCurrentLote(lote || null)
-              }}
-              className="input w-48"
-            >
-              <option value="">Seleccionar lote activo</option>
-              {lotes.map(lote => (
-                <option key={lote.id} value={lote.id}>
-                  Lote {lote.loteNumber} - {lote.isCompleted ? 'Completado' : 'En Progreso'}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
 
 
         </>
@@ -2095,17 +2338,17 @@ export default function ShippingWeights() {
       {activeTab === 'history' && (
         <>
           {/* Historial de Envíos */}
-      <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+        <div className="card">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900">
             Historial de Envíos
-          </h2>
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-500">
+            </h2>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500">
               {filteredShipments.length} de {shipmentHistory.length} envío(s)
-            </span>
+              </span>
+            </div>
           </div>
-        </div>
 
         {/* Barra de búsqueda */}
         <div className="mb-4">
@@ -2119,8 +2362,8 @@ export default function ShippingWeights() {
             />
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
-            </div>
-          </div>
+                            </div>
+                              </div>
         </div>
 
         <div className="space-y-4">
@@ -2186,15 +2429,15 @@ export default function ShippingWeights() {
                   <div>
                     <span className="font-medium text-gray-800">Destino:</span>
                     <p className="text-gray-600">{shipment.destination}</p>
-                  </div>
+                      </div>
                   <div>
                     <span className="font-medium text-gray-800">Cliente:</span>
                     <p className="text-gray-600">{shipment.client}</p>
-                  </div>
+                      </div>
                   <div>
                     <span className="font-medium text-gray-800">Fecha Integración:</span>
                     <p className="text-gray-600">{shipment.integrationDate}</p>
-                  </div>
+                    </div>
                   <div>
                     <span className="font-medium text-gray-800">Diferencia:</span>
                     <p className={`font-medium ${shipment.percentageDiff >= -5 && shipment.percentageDiff <= 5 ? 'text-green-600' : shipment.percentageDiff >= -10 && shipment.percentageDiff <= 10 ? 'text-yellow-600' : 'text-red-600'}`}>
@@ -2922,7 +3165,7 @@ export default function ShippingWeights() {
                     </label>
                     <div className="flex space-x-3">
                       <label className="flex items-center">
-                        <input
+                    <input 
                           type="radio"
                           name="taraType"
                           value="yute"
@@ -2943,7 +3186,7 @@ export default function ShippingWeights() {
                         />
                         <span className="text-xs text-gray-700">Nylon (1.0 lbs)</span>
                       </label>
-                    </div>
+                  </div>
                   </div>
 
                   {/* Peso Bruto */}
@@ -2951,7 +3194,7 @@ export default function ShippingWeights() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Peso Bruto (qq)
                     </label>
-                    <input
+                    <input 
                       type="number"
                       step="0.01"
                       min="0"
@@ -2959,7 +3202,7 @@ export default function ShippingWeights() {
                       onChange={(e) => handlePesajeFormChange('grossWeight', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       placeholder="0.00"
-                      required
+                      required 
                     />
                   </div>
 
@@ -2968,16 +3211,16 @@ export default function ShippingWeights() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Cantidad de Bultos
                     </label>
-                    <input
+                    <input 
                       type="number"
                       min="1"
                       value={pesajeForm.bags}
                       onChange={(e) => handlePesajeFormChange('bags', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                       placeholder="0"
-                      required
+                      required 
                     />
-                  </div>
+                </div>
                 
                   {/* Cálculo Automático del Peso Neto */}
                   {pesajeForm.grossWeight && pesajeForm.bags && (
@@ -2989,17 +3232,17 @@ export default function ShippingWeights() {
                         <div className="flex justify-between">
                           <span>Peso Bruto:</span>
                           <span>{pesajeForm.grossWeight} qq</span>
-                        </div>
+                </div>
                         <div className="flex justify-between">
                           <span>Tara por Bulto:</span>
                           <span>{pesajeForm.taraType === 'yute' ? '1.5' : '1.0'} lbs</span>
-                        </div>
+                      </div>
                         <div className="flex justify-between">
                           <span>Total Tara:</span>
                           <span>
                             {(pesajeForm.taraType === 'yute' ? 1.5 : 1.0) * parseInt(pesajeForm.bags || '0')} lbs
                           </span>
-                        </div>
+                      </div>
                         <div className="flex justify-between font-semibold border-t border-green-300 pt-1">
                           <span>Peso Neto:</span>
                           <span>
@@ -3009,7 +3252,7 @@ export default function ShippingWeights() {
                               pesajeForm.taraType
                             ).toFixed(2)} lbs
                           </span>
-                        </div>
+                    </div>
                         <div className="flex justify-between text-xs text-green-600">
                           <span>En Quintales:</span>
                           <span>
@@ -3019,9 +3262,9 @@ export default function ShippingWeights() {
                               pesajeForm.taraType
                             ) / 100).toFixed(2)} qq
                           </span>
-                        </div>
                       </div>
                     </div>
+                      </div>
                   )}
 
                   {/* Notas */}
@@ -3041,7 +3284,7 @@ export default function ShippingWeights() {
 
                 {/* Botones */}
                 <div className="flex justify-end space-x-2 mt-4 pt-3 border-t border-gray-200">
-                  <button
+                  <button 
                     type="button"
                     onClick={handleClosePesajeModal}
                     className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500"
@@ -3053,6 +3296,188 @@ export default function ShippingWeights() {
                     className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     Registrar Pesaje
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Agregar Pesaje Mejorado */}
+      {showWeighingModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-semibold text-gray-900">Agregar Pesaje</h3>
+                <button
+                  onClick={() => {
+                    setShowWeighingModal(false)
+                    setSelectedPartidaForWeighing(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); addWeighing(); }} className="space-y-4">
+                {/* Selector de Partida */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Seleccionar Partida
+                  </label>
+                  <select
+                    value={selectedPartidaForWeighing?.id || ''}
+                    onChange={(e) => {
+                      const partida = partidas.find(p => p.id === e.target.value)
+                      setSelectedPartidaForWeighing(partida || null)
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Selecciona una partida...</option>
+                    {partidas.map((partida) => (
+                      <option key={partida.id} value={partida.id}>
+                        {partida.numeroIngreso} - {partida.pesoEsperado} qq esperados
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Información de la partida seleccionada */}
+                {selectedPartidaForWeighing && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <h4 className="text-sm font-semibold text-blue-900 mb-2">
+                      Partida: {selectedPartidaForWeighing.numeroIngreso}
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="font-medium text-blue-800">Peso Esperado:</span>
+                        <p className="text-blue-700">{selectedPartidaForWeighing.pesoEsperado} qq</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-blue-800">Registrado:</span>
+                        <p className="text-blue-700">
+                          {(selectedPartidaForWeighing.pesoTotalRegistrado / 100).toFixed(2)} qq
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-blue-800">Pesajes:</span>
+                        <p className="text-blue-700">{selectedPartidaForWeighing.pesajes.length}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-blue-800">Estado:</span>
+                        <p className={`font-medium ${selectedPartidaForWeighing.isCompleted ? 'text-green-700' : 'text-yellow-700'}`}>
+                          {selectedPartidaForWeighing.isCompleted ? 'Completada' : 'En Progreso'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Peso Bruto (lbs)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={weighingForm.pesoBruto}
+                    onChange={(e) => setWeighingForm({...weighingForm, pesoBruto: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Número de Bultos
+                  </label>
+                  <input
+                    type="number"
+                    value={weighingForm.bultos}
+                    onChange={(e) => setWeighingForm({...weighingForm, bultos: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tara Total (lbs)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={weighingForm.tara}
+                    onChange={(e) => setWeighingForm({...weighingForm, tara: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Operador
+                  </label>
+                  <select
+                    value={weighingForm.operador}
+                    onChange={(e) => setWeighingForm({...weighingForm, operador: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="Operador 1">Operador 1</option>
+                    <option value="Operador 2">Operador 2</option>
+                    <option value="Operador 3">Operador 3</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Observaciones (opcional)
+                  </label>
+                  <textarea
+                    value={weighingForm.observaciones}
+                    onChange={(e) => setWeighingForm({...weighingForm, observaciones: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={3}
+                    placeholder="Observaciones adicionales..."
+                  />
+                </div>
+
+                {/* Cálculo automático del peso neto */}
+                {weighingForm.pesoBruto && weighingForm.tara && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm font-medium text-green-800">Peso Neto Calculado:</span>
+                      <span className="text-lg font-bold text-green-900">
+                        {(parseFloat(weighingForm.pesoBruto || '0') - parseFloat(weighingForm.tara || '0')).toFixed(2)} lbs
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowWeighingModal(false)
+                      setSelectedPartidaForWeighing(null)
+                    }}
+                    className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    Agregar Pesaje
                   </button>
                 </div>
               </form>
