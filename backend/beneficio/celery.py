@@ -32,6 +32,14 @@ app.conf.beat_schedule = {
         'task': 'apps.temperatures.tasks.cleanup_old_readings',
         'schedule': 3600.0,  # Every hour
     },
+    'cleanup-old-attendance': {
+        'task': 'apps.attendance.tasks.cleanup_old_attendance_records',
+        'schedule': 86400.0,  # Every 24 hours (medianoche)
+    },
+    'daily-attendance-summary': {
+        'task': 'apps.attendance.tasks.generate_daily_attendance_summary',
+        'schedule': 86400.0,  # Every 24 hours
+    },
 }
 
 app.conf.timezone = 'America/Guatemala'

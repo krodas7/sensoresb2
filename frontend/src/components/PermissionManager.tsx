@@ -7,10 +7,23 @@ import {
   TrashIcon, 
   ArrowDownTrayIcon,
   CogIcon,
+  Cog6ToothIcon,
   CheckIcon,
   XMarkIcon,
   UserIcon,
-  KeyIcon
+  KeyIcon,
+  HomeIcon,
+  UserGroupIcon,
+  TruckIcon,
+  SparklesIcon,
+  LinkIcon,
+  ScaleIcon,
+  FireIcon,
+  BeakerIcon,
+  BuildingOfficeIcon,
+  DocumentChartBarIcon,
+  ClipboardDocumentListIcon,
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline'
 import api from '../services/api'
 import toast from 'react-hot-toast'
@@ -52,28 +65,28 @@ interface PermissionManagerProps {
 }
 
 const MODULES = [
-  { key: 'dashboard', name: 'Dashboard', icon: '🏠' },
-  { key: 'usuarios', name: 'Usuarios', icon: '👥' },
-  { key: 'empleados', name: 'Empleados', icon: '👷' },
-  { key: 'proveedores', name: 'Proveedores', icon: '🚚' },
-  { key: 'catacion', name: 'Catación', icon: '☕' },
-  { key: 'integracion_lotes', name: 'Integración de Lotes', icon: '📦' },
-  { key: 'pesos_envio', name: 'Pesos Envío', icon: '⚖️' },
-  { key: 'temperaturas', name: 'Temperaturas', icon: '🌡️' },
-  { key: 'fermentacion', name: 'Fermentación', icon: '🫧' },
-  { key: 'ocupacion', name: 'Ocupación', icon: '🏭' },
-  { key: 'reportes', name: 'Reportes', icon: '📊' },
-  { key: 'logs', name: 'Logs', icon: '📝' },
-  { key: 'configuracion', name: 'Configuración', icon: '⚙️' }
+  { key: 'dashboard', name: 'Dashboard', Icon: HomeIcon },
+  { key: 'usuarios', name: 'Usuarios', Icon: UserGroupIcon },
+  { key: 'empleados', name: 'Empleados', Icon: UserGroupIcon },
+  { key: 'proveedores', name: 'Proveedores', Icon: TruckIcon },
+  { key: 'catacion', name: 'Catación', Icon: SparklesIcon },
+  { key: 'integracion_lotes', name: 'Integración de Lotes', Icon: LinkIcon },
+  { key: 'pesos_envio', name: 'Pesos Envío', Icon: ScaleIcon },
+  { key: 'temperaturas', name: 'Temperaturas', Icon: FireIcon },
+  { key: 'fermentacion', name: 'Fermentación', Icon: BeakerIcon },
+  { key: 'ocupacion', name: 'Ocupación', Icon: BuildingOfficeIcon },
+  { key: 'reportes', name: 'Reportes', Icon: DocumentChartBarIcon },
+  { key: 'logs', name: 'Logs', Icon: ClipboardDocumentListIcon },
+  { key: 'configuracion', name: 'Configuración', Icon: Cog6ToothIcon }
 ]
 
 const PERMISSIONS = [
-  { key: 'view', name: 'Ver', icon: '👁️', color: 'bg-blue-100 text-blue-800' },
-  { key: 'create', name: 'Crear', icon: '➕', color: 'bg-green-100 text-green-800' },
-  { key: 'edit', name: 'Editar', icon: '✏️', color: 'bg-yellow-100 text-yellow-800' },
-  { key: 'delete', name: 'Eliminar', icon: '🗑️', color: 'bg-red-100 text-red-800' },
-  { key: 'export', name: 'Exportar', icon: '📤', color: 'bg-purple-100 text-purple-800' },
-  { key: 'admin', name: 'Administrar', icon: '🔧', color: 'bg-gray-100 text-gray-800' }
+  { key: 'view', name: 'Ver', Icon: EyeIcon, color: 'bg-blue-100 text-blue-800' },
+  { key: 'create', name: 'Crear', Icon: PlusIcon, color: 'bg-green-100 text-green-800' },
+  { key: 'edit', name: 'Editar', Icon: PencilIcon, color: 'bg-yellow-100 text-yellow-800' },
+  { key: 'delete', name: 'Eliminar', Icon: TrashIcon, color: 'bg-red-100 text-red-800' },
+  { key: 'export', name: 'Exportar', Icon: ArrowDownTrayIcon, color: 'bg-purple-100 text-purple-800' },
+  { key: 'admin', name: 'Administrar', Icon: WrenchScrewdriverIcon, color: 'bg-gray-100 text-gray-800' }
 ]
 
 export default function PermissionManager({ userId, onClose }: PermissionManagerProps) {
@@ -284,16 +297,21 @@ export default function PermissionManager({ userId, onClose }: PermissionManager
                 </h4>
 
                 <div className="space-y-4">
-                  {MODULES.map(module => (
+                  {MODULES.map(module => {
+                    const ModuleIcon = module.Icon
+                    return (
                     <div key={module.key} className="bg-white rounded-lg p-4">
                       <div className="flex items-center gap-3 mb-3">
-                        <span className="text-2xl">{module.icon}</span>
+                        <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <ModuleIcon className="h-5 w-5 text-blue-600" />
+                        </div>
                         <h5 className="font-medium text-gray-900">{module.name}</h5>
                       </div>
                       
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                         {PERMISSIONS.map(permission => {
                           const hasAccess = hasPermission(module.key, permission.key)
+                          const PermissionIcon = permission.Icon
                           return (
                             <label
                               key={permission.key}
@@ -310,7 +328,7 @@ export default function PermissionManager({ userId, onClose }: PermissionManager
                                 className="h-4 w-4 text-green-600 focus:ring-green-500 rounded"
                               />
                               <span className="text-sm font-medium flex items-center gap-1">
-                                <span>{permission.icon}</span>
+                                <PermissionIcon className="h-4 w-4" />
                                 {permission.name}
                               </span>
                             </label>
@@ -318,7 +336,7 @@ export default function PermissionManager({ userId, onClose }: PermissionManager
                         })}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             </div>

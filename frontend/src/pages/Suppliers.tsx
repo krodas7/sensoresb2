@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   TruckIcon,
   PlusIcon, 
@@ -26,6 +26,8 @@ import {
   BuildingOfficeIcon,
   HomeIcon
 } from '@heroicons/react/24/outline'
+import api from '../services/api'
+import toast from 'react-hot-toast'
 
 interface Supplier {
   id: number
@@ -205,7 +207,7 @@ const mockDeliveries: Delivery[] = [
 ]
 
 export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState<Supplier[]>(mockSuppliers)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [deliveries, setDeliveries] = useState<Delivery[]>(mockDeliveries)
   const [activeTab, setActiveTab] = useState('suppliers')
   const [isNewSupplierModalOpen, setIsNewSupplierModalOpen] = useState(false)
@@ -215,20 +217,57 @@ export default function Suppliers() {
   const [filterType, setFilterType] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterRegion, setFilterRegion] = useState('')
+  const [loading, setLoading] = useState(true)
 
   const [newSupplier, setNewSupplier] = useState({
     name: '',
     type: 'cc1' as Supplier['type'],
     contactPerson: '',
-    phone: '',
-    address: '',
-    city: '',
-    region: '',
-    country: 'Colombia',
-    certifications: '',
-    paymentTerms: '30 días',
     notes: ''
   })
+
+  // Fetch suppliers from API
+  useEffect(() => {
+    fetchSuppliers()
+  }, [])
+
+  const fetchSuppliers = async () => {
+    try {
+      setLoading(true)
+      const response = await api.get('/suppliers/')
+      const data = response.data.results || response.data || []
+      
+      // Mapear los datos del backend al formato del frontend
+      const mappedSuppliers = data.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        type: s.type,
+        contactPerson: s.contact_person,
+        phone: '',
+        address: '',
+        city: '',
+        region: '',
+        country: '',
+        registrationDate: s.registration_date,
+        status: s.status,
+        rating: parseFloat(s.rating) || 0,
+        totalDeliveries: s.total_deliveries || 0,
+        totalWeight: parseFloat(s.total_weight) || 0,
+        certifications: [],
+        paymentTerms: '',
+        notes: s.notes || '',
+        isVerified: s.is_verified
+      }))
+      
+      setSuppliers(mappedSuppliers)
+    } catch (error) {
+      console.error('Error fetching suppliers:', error)
+      toast.error('Error al cargar proveedores')
+      setSuppliers([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const getTypeColor = (type: Supplier['type']) => {
     switch (type) {
@@ -302,35 +341,45 @@ export default function Suppliers() {
     }))
   }
 
-  const handleCreateSupplier = (e: React.FormEvent) => {
+  const handleCreateSupplier = async (e: React.FormEvent) => {
     e.preventDefault()
-    const newId = suppliers.length > 0 ? Math.max(...suppliers.map(s => s.id)) + 1 : 1
-    const supplierToAdd: Supplier = {
-      ...newSupplier,
-      id: newId,
-      registrationDate: new Date().toISOString().split('T')[0],
-      status: 'active',
-      rating: 0,
-      totalDeliveries: 0,
-      totalWeight: 0,
-      certifications: newSupplier.certifications.split(',').map(c => c.trim()).filter(c => c),
-      isVerified: false
+    
+    try {
+      const supplierData = {
+        name: newSupplier.name,
+        type: newSupplier.type,
+        contact_person: newSupplier.contactPerson,
+        notes: newSupplier.notes
+      }
+      
+      await api.post('/suppliers/', supplierData)
+      toast.success('Proveedor creado exitosamente')
+      fetchSuppliers()
+      setIsNewSupplierModalOpen(false)
+      setNewSupplier({
+        name: '',
+        type: 'cc1',
+        contactPerson: '',
+        notes: ''
+      })
+    } catch (error: any) {
+      console.error('Error creating supplier:', error)
+      const errorMessage = error.response?.data?.name?.[0] || 'Error al crear proveedor'
+      toast.error(errorMessage)
     }
-    setSuppliers(prev => [...prev, supplierToAdd])
-    setIsNewSupplierModalOpen(false)
-    setNewSupplier({
-      name: '',
-      type: 'cc1',
-      contactPerson: '',
-      phone: '',
-      address: '',
-      city: '',
-      region: '',
-      country: 'Colombia',
-      certifications: '',
-      paymentTerms: '30 días',
-      notes: ''
-    })
+  }
+
+  const handleDeleteSupplier = async (supplierId: number) => {
+    if (!confirm('¿Estás seguro de eliminar este proveedor?')) return
+    
+    try {
+      await api.delete(`/suppliers/${supplierId}/`)
+      toast.success('Proveedor eliminado exitosamente')
+      fetchSuppliers()
+    } catch (error) {
+      console.error('Error deleting supplier:', error)
+      toast.error('Error al eliminar proveedor')
+    }
   }
 
   const handleEditSupplier = (supplier: Supplier) => {
@@ -356,6 +405,16 @@ export default function Suppliers() {
       delivery.variety.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesSearch
   })
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6 p-6 bg-gray-50 min-h-screen">
@@ -530,13 +589,15 @@ export default function Suppliers() {
 
                 <div className="space-y-2 mb-4">
                   <div className="flex items-center text-sm text-gray-600">
-                    <MapPinIcon className="w-4 h-4 mr-2" />
-                    {supplier.city}, {supplier.region}
+                    <UserIcon className="w-4 h-4 mr-2" />
+                    {supplier.contactPerson}
                   </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <PhoneIcon className="w-4 h-4 mr-2" />
-                    {supplier.phone}
-                  </div>
+                  {supplier.notes && (
+                    <div className="flex items-start text-sm text-gray-600">
+                      <InformationCircleIcon className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="line-clamp-2">{supplier.notes}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-4">
@@ -563,21 +624,6 @@ export default function Suppliers() {
                   </div>
                 </div>
 
-                {supplier.certifications.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs text-gray-500 mb-2">Certificaciones</p>
-                    <div className="flex flex-wrap gap-1">
-                      {supplier.certifications.map((cert, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full"
-                        >
-                          {cert}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <div className="flex items-center gap-2">
@@ -595,6 +641,7 @@ export default function Suppliers() {
                       <EyeIcon className="w-4 h-4" />
                     </button>
                     <button
+                      onClick={() => handleDeleteSupplier(supplier.id)}
                       className="text-red-600 hover:text-red-800 p-1 rounded-md hover:bg-red-50 transition-colors"
                       title="Eliminar"
                     >
@@ -743,36 +790,38 @@ export default function Suppliers() {
               </div>
 
               <form onSubmit={handleCreateSupplier} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Nombre del Proveedor</label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={newSupplier.name}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="Ej: Finca El Paraíso"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Tipo de Café</label>
-                    <select
-                      name="type"
-                      value={newSupplier.type}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                    >
-                      <option value="cc1">Café Cereza CC1</option>
-                      <option value="parchment">Café Pergamino</option>
-                      <option value="both">Ambos Tipos</option>
-                    </select>
-                  </div>
+                {/* Nombre del Proveedor */}
+                <div>
+                  <label className="label">Nombre del Proveedor *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={newSupplier.name}
+                    onChange={handleNewSupplierChange}
+                    className="input"
+                    placeholder="Ej: Finca El Paraíso"
+                    required
+                  />
                 </div>
 
+                {/* Tipo de Café */}
                 <div>
-                  <label className="label">Persona de Contacto</label>
+                  <label className="label">Tipo de Café *</label>
+                  <select
+                    name="type"
+                    value={newSupplier.type}
+                    onChange={handleNewSupplierChange}
+                    className="input"
+                  >
+                    <option value="cc1">Café Cereza CC1</option>
+                    <option value="parchment">Café Pergamino</option>
+                    <option value="both">Ambos Tipos</option>
+                  </select>
+                </div>
+
+                {/* Persona de Contacto */}
+                <div>
+                  <label className="label">Persona de Contacto *</label>
                   <input
                     type="text"
                     name="contactPerson"
@@ -784,96 +833,7 @@ export default function Suppliers() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Teléfono</label>
-                    <input
-                      type="tel"
-                      name="phone"
-                      value={newSupplier.phone}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="+57 300 123 4567"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Ciudad</label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={newSupplier.city}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="Ej: Manizales"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Región</label>
-                    <input
-                      type="text"
-                      name="region"
-                      value={newSupplier.region}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="Ej: Caldas"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="label">País</label>
-                    <input
-                      type="text"
-                      name="country"
-                      value={newSupplier.country}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="label">Dirección</label>
-                  <textarea
-                    name="address"
-                    value={newSupplier.address}
-                    onChange={handleNewSupplierChange}
-                    className="input"
-                    rows={2}
-                    placeholder="Dirección completa del proveedor"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Certificaciones (separadas por comas)</label>
-                    <input
-                      type="text"
-                      name="certifications"
-                      value={newSupplier.certifications}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="Fair Trade, Organic, Rainforest Alliance"
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Términos de Pago</label>
-                    <input
-                      type="text"
-                      name="paymentTerms"
-                      value={newSupplier.paymentTerms}
-                      onChange={handleNewSupplierChange}
-                      className="input"
-                      placeholder="30 días"
-                    />
-                  </div>
-                </div>
-
+                {/* Notas Adicionales */}
                 <div>
                   <label className="label">Notas Adicionales</label>
                   <textarea

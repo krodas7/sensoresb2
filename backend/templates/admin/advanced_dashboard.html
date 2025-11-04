@@ -1,0 +1,550 @@
+{% extends 'admin/base_site.html' %}
+{% load static i18n jazzmin %}
+
+{% block title %}Dashboard Avanzado - Sistema de Beneficio{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-0">🚀 Dashboard Avanzado - Sistema de Beneficio</h1>
+                    <p class="text-muted mb-0">Monitoreo en tiempo real de todas las operaciones</p>
+                </div>
+                <div>
+                    <button id="refresh-dashboard" class="btn btn-primary btn-lg">
+                        <i class="fas fa-sync-alt"></i> Actualizar
+                    </button>
+                    <button id="backup-now" class="btn btn-success btn-lg ml-2">
+                        <i class="fas fa-database"></i> Backup
+                    </button>
+                </div>
+            </div>
+            <div class="mt-2">
+                <span id="last-update" class="text-muted"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs Principales -->
+    <div class="row mb-4">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title" id="total-lots">0</h4>
+                            <p class="card-text">Total Lotes</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-box fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title" id="avg-quality">0</h4>
+                            <p class="card-text">Calidad Promedio</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-star fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title" id="active-employees">0</h4>
+                            <p class="card-text">Empleados Activos</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-users fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title" id="active-alerts">0</h4>
+                            <p class="card-text">Alertas Activas</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos Principales -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line"></i> Producción por Día (Últimos 7 días)
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="productionChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-thermometer-half"></i> Temperaturas
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="temperatureChart" style="height: 300px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Métricas Detalladas -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-coffee"></i> Métricas de Calidad
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <p><strong>Total Sesiones:</strong> <span id="total-sessions">0</span></p>
+                            <p><strong>Sesiones Activas:</strong> <span id="active-sessions">0</span></p>
+                            <p><strong>Total Evaluaciones:</strong> <span id="total-scores">0</span></p>
+                        </div>
+                        <div class="col-6">
+                            <p><strong>Mejor Score:</strong> <span id="best-score">0</span></p>
+                            <p><strong>Score Promedio:</strong> <span id="avg-score">0</span></p>
+                            <p><strong>Evaluaciones Hoy:</strong> <span id="scores-today">0</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-cogs"></i> Métricas Operacionales
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6">
+                            <p><strong>Lotes Activos:</strong> <span id="active-lots">0</span></p>
+                            <p><strong>Áreas Ocupadas:</strong> <span id="occupied-areas">0</span></p>
+                            <p><strong>Sensores Activos:</strong> <span id="active-sensors">0</span></p>
+                        </div>
+                        <div class="col-6">
+                            <p><strong>Temp. Promedio:</strong> <span id="avg-temp">0°C</span></p>
+                            <p><strong>Asistencia Hoy:</strong> <span id="attendance-today">0</span></p>
+                            <p><strong>Alertas Críticas:</strong> <span id="critical-alerts">0</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sistema de Backup -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-shield-alt"></i> Sistema de Backup
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <button class="btn btn-primary btn-block" onclick="backupDatabase()">
+                                <i class="fas fa-database"></i> Backup BD
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-info btn-block" onclick="backupMedia()">
+                                <i class="fas fa-images"></i> Backup Media
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-success btn-block" onclick="backupFull()">
+                                <i class="fas fa-archive"></i> Backup Completo
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-secondary btn-block" onclick="viewBackupStats()">
+                                <i class="fas fa-chart-bar"></i> Ver Estadísticas
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div id="backup-status" class="alert" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alertas y Notificaciones -->
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-bell"></i> Alertas y Notificaciones
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="alerts-container">
+                        <p class="text-muted">Cargando alertas...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Variables globales para los gráficos
+let productionChart = null;
+let temperatureChart = null;
+
+// Función para actualizar el dashboard
+async function refreshDashboard() {
+    try {
+        // Actualizar KPIs principales
+        const kpiResponse = await fetch('/api/v1/dashboard/kpi-summary/', {
+            credentials: 'include'
+        });
+        const kpiData = await kpiResponse.json();
+        
+        if (kpiData.success) {
+            updateKPIs(kpiData.kpis);
+        }
+        
+        // Actualizar métricas detalladas
+        const comprehensiveResponse = await fetch('/api/v1/dashboard/comprehensive/', {
+            credentials: 'include'
+        });
+        const comprehensiveData = await comprehensiveResponse.json();
+        
+        if (comprehensiveData.success) {
+            updateDetailedMetrics(comprehensiveData);
+            updateCharts(comprehensiveData);
+        }
+        
+        // Actualizar timestamp
+        document.getElementById('last-update').textContent = 
+            `Última actualización: ${new Date().toLocaleString()}`;
+            
+    } catch (error) {
+        console.error('Error actualizando dashboard:', error);
+    }
+}
+
+// Función para actualizar KPIs
+function updateKPIs(kpis) {
+    document.getElementById('total-lots').textContent = kpis.total_lots || 0;
+    document.getElementById('avg-quality').textContent = (kpis.avg_quality_score || 0).toFixed(1);
+    document.getElementById('active-employees').textContent = kpis.active_employees || 0;
+    document.getElementById('active-alerts').textContent = kpis.active_alerts || 0;
+}
+
+// Función para actualizar métricas detalladas
+function updateDetailedMetrics(data) {
+    // Métricas de calidad
+    if (data.quality.success) {
+        const quality = data.quality;
+        document.getElementById('total-sessions').textContent = quality.cupping_sessions.total_sessions || 0;
+        document.getElementById('active-sessions').textContent = quality.cupping_sessions.active_sessions || 0;
+        document.getElementById('total-scores').textContent = quality.score_metrics.total_scores || 0;
+        document.getElementById('avg-score').textContent = (quality.score_metrics.avg_overall || 0).toFixed(1);
+        
+        if (quality.best_scores.length > 0) {
+            document.getElementById('best-score').textContent = quality.best_scores[0].overall.toFixed(1);
+        }
+    }
+    
+    // Métricas operacionales
+    if (data.operational.success) {
+        const operational = data.operational;
+        document.getElementById('active-lots').textContent = data.production.lots.active_lots || 0;
+        document.getElementById('occupied-areas').textContent = operational.areas.occupied_areas || 0;
+        document.getElementById('active-sensors').textContent = data.equipment.sensors.active_sensors || 0;
+        document.getElementById('avg-temp').textContent = `${(operational.temperatures.avg_temp || 0).toFixed(1)}°C`;
+        document.getElementById('attendance-today').textContent = operational.attendance.total_check_ins || 0;
+        document.getElementById('critical-alerts').textContent = data.alerts.critical_alerts || 0;
+    }
+}
+
+// Función para actualizar gráficos
+function updateCharts(data) {
+    // Gráfico de producción
+    if (data.production.success && data.production.daily_production) {
+        updateProductionChart(data.production.daily_production);
+    }
+    
+    // Gráfico de temperaturas
+    if (data.operational.success && data.operational.temperatures) {
+        updateTemperatureChart(data.operational.temperatures);
+    }
+}
+
+// Función para actualizar gráfico de producción
+function updateProductionChart(productionData) {
+    const ctx = document.getElementById('productionChart').getContext('2d');
+    
+    if (productionChart) {
+        productionChart.destroy();
+    }
+    
+    const labels = productionData.map(item => item.day);
+    const counts = productionData.map(item => item.count);
+    const weights = productionData.map(item => item.total_weight || 0);
+    
+    productionChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Lotes Procesados',
+                data: counts,
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                tension: 0.1
+            }, {
+                label: 'Peso Total (kg)',
+                data: weights,
+                borderColor: 'rgb(255, 99, 132)',
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                tension: 0.1,
+                yAxisID: 'y1'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false,
+                    },
+                }
+            }
+        }
+    });
+}
+
+// Función para actualizar gráfico de temperaturas
+function updateTemperatureChart(tempData) {
+    const ctx = document.getElementById('temperatureChart').getContext('2d');
+    
+    if (temperatureChart) {
+        temperatureChart.destroy();
+    }
+    
+    temperatureChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Promedio', 'Máxima', 'Mínima'],
+            datasets: [{
+                data: [
+                    tempData.avg_temp || 0,
+                    tempData.max_temp || 0,
+                    tempData.min_temp || 0
+                ],
+                backgroundColor: [
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(255, 205, 86, 0.8)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+}
+
+// Funciones de backup
+async function backupDatabase() {
+    showBackupStatus('Iniciando backup de base de datos...', 'info');
+    
+    try {
+        const response = await fetch('/api/v1/backup/records/backup_database/', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showBackupStatus('Backup de base de datos iniciado correctamente', 'success');
+            monitorBackupTask(data.task_id);
+        } else {
+            showBackupStatus('Error iniciando backup: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showBackupStatus('Error de conexión: ' + error.message, 'danger');
+    }
+}
+
+async function backupMedia() {
+    showBackupStatus('Iniciando backup de archivos media...', 'info');
+    
+    try {
+        const response = await fetch('/api/v1/backup/records/backup_media/', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showBackupStatus('Backup de media iniciado correctamente', 'success');
+            monitorBackupTask(data.task_id);
+        } else {
+            showBackupStatus('Error iniciando backup: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showBackupStatus('Error de conexión: ' + error.message, 'danger');
+    }
+}
+
+async function backupFull() {
+    showBackupStatus('Iniciando backup completo...', 'info');
+    
+    try {
+        const response = await fetch('/api/v1/backup/records/backup_full/', {
+            method: 'POST',
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showBackupStatus('Backup completo iniciado correctamente', 'success');
+            monitorBackupTask(data.task_id);
+        } else {
+            showBackupStatus('Error iniciando backup: ' + data.error, 'danger');
+        }
+    } catch (error) {
+        showBackupStatus('Error de conexión: ' + error.message, 'danger');
+    }
+}
+
+function showBackupStatus(message, type) {
+    const statusDiv = document.getElementById('backup-status');
+    statusDiv.className = `alert alert-${type}`;
+    statusDiv.textContent = message;
+    statusDiv.style.display = 'block';
+    
+    setTimeout(() => {
+        statusDiv.style.display = 'none';
+    }, 5000);
+}
+
+async function monitorBackupTask(taskId) {
+    // Monitorear el progreso de la tarea
+    const interval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/v1/backup/task-status/${taskId}/`, {
+                credentials: 'include'
+            });
+            const data = await response.json();
+            
+            if (data.ready) {
+                clearInterval(interval);
+                if (data.successful) {
+                    showBackupStatus('Backup completado exitosamente', 'success');
+                } else {
+                    showBackupStatus('Backup falló: ' + data.result, 'danger');
+                }
+            }
+        } catch (error) {
+            console.error('Error monitoreando tarea:', error);
+        }
+    }, 2000);
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Actualizar dashboard al cargar
+    refreshDashboard();
+    
+    // Event listener para botón de actualizar
+    document.getElementById('refresh-dashboard').addEventListener('click', refreshDashboard);
+    
+    // Event listener para botón de backup
+    document.getElementById('backup-now').addEventListener('click', backupFull);
+    
+    // Actualizar cada 30 segundos
+    setInterval(refreshDashboard, 30000);
+});
+</script>
+
+<style>
+.card {
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    border: none;
+    border-radius: 8px;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.alert {
+    border-radius: 6px;
+}
+
+#backup-status {
+    margin-top: 15px;
+}
+</style>
+{% endblock %}
+

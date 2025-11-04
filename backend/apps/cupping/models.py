@@ -106,20 +106,19 @@ class Cupper(models.Model):
     ROLE_CHOICES = [
         ('admin', 'Administrador'),
         ('qc_leader', 'Líder de Calidad'),
-        ('cupper', 'Catador'),
+        ('taster', 'Catador'),
         ('guest', 'Invitado'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cupper_profile')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cupper_profile', null=True, blank=True)
     name = models.CharField(max_length=100, verbose_name='Nombre')
-    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='cupper', verbose_name='Rol')
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='taster', verbose_name='Rol')
     is_active = models.BooleanField(default=True, verbose_name='Activo')
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
         verbose_name = 'Catador'
         verbose_name_plural = 'Catadores'
-        unique_together = ['user', 'name']
     
     def __str__(self):
         return f"{self.name} ({self.get_role_display()})"
@@ -218,3 +217,72 @@ class CuppingSessionParticipant(models.Model):
     
     def __str__(self):
         return f"{self.cupper.name} en {self.cupping.name}"
+
+
+class CommercialCupping(models.Model):
+    """Catación Comercial - Evaluación rápida de producción"""
+    
+    ESTADO_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('aprobado', 'Aprobado'),
+        ('rechazado', 'Rechazado'),
+    ]
+    
+    TIPO_CHOICES = [
+        ('Estrictamente Duro (SHB)', 'Estrictamente Duro (SHB)'),
+        ('Duro (HB)', 'Duro (HB)'),
+        ('Semi Duro', 'Semi Duro'),
+        ('Extra Prime', 'Extra Prime'),
+        ('Prime', 'Prime'),
+        ('Supremo', 'Supremo'),
+        ('Excelso', 'Excelso'),
+        ('Otro', 'Otro'),
+    ]
+    
+    APARIENCIA_CHOICES = [
+        ('Excelente', 'Excelente'),
+        ('Muy Buena', 'Muy Buena'),
+        ('Buena', 'Buena'),
+        ('Regular', 'Regular'),
+        ('Mala', 'Mala'),
+    ]
+    
+    TUESTE_CHOICES = [
+        ('Claro', 'Claro'),
+        ('Medio', 'Medio'),
+        ('Oscuro', 'Oscuro'),
+        ('Muy Oscuro', 'Muy Oscuro'),
+    ]
+    
+    # Campos básicos
+    numero_ingreso = models.CharField(max_length=100, unique=True, verbose_name='Número de Ingreso')
+    humedad = models.DecimalField(max_digits=5, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='Humedad (%)')
+    rendimiento = models.DecimalField(max_digits=5, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(100)], verbose_name='Rendimiento (%)')
+    qq = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)], default=0, verbose_name='QQ (Peso en quintales)')
+    apariencia_verde = models.CharField(max_length=20, choices=APARIENCIA_CHOICES, verbose_name='Apariencia Verde')
+    tueste = models.CharField(max_length=20, choices=TUESTE_CHOICES, verbose_name='Tueste')
+    QUAKERS_CHOICES = [
+        ('No', 'No'),
+        ('Pocos', 'Pocos'),
+        ('Varios', 'Varios'),
+        ('Bastantes', 'Bastantes'),
+    ]
+    
+    quakers = models.CharField(max_length=20, choices=QUAKERS_CHOICES, default='No', verbose_name='Quakers')
+    tipo = models.CharField(max_length=50, choices=TIPO_CHOICES, verbose_name='Tipo')
+    taza = models.CharField(max_length=200, verbose_name='Taza')
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='pendiente', verbose_name='Estado')
+    fecha_catacion = models.DateField(verbose_name='Fecha de Catación')
+    observaciones = models.TextField(blank=True, verbose_name='Observaciones')
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = 'Catación Comercial'
+        verbose_name_plural = 'Cataciones Comerciales'
+        ordering = ['-fecha_catacion']
+    
+    def __str__(self):
+        return f"{self.numero_ingreso} - {self.fecha_catacion}"

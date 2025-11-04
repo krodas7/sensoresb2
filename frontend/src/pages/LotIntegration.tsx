@@ -23,6 +23,7 @@ import {
   InformationCircleIcon
 } from '@heroicons/react/24/outline'
 import toast from 'react-hot-toast'
+import api from '../services/api'
 
 interface Lot {
   id: number | string
@@ -102,6 +103,13 @@ export default function LotIntegration() {
     loadCommercialLots()
   }, [])
 
+  // Recargar lotes al cambiar de tab
+  useEffect(() => {
+    if (activeTab === 'commercial') {
+      loadCommercialLots()
+    }
+  }, [activeTab])
+
   const loadIntegrations = () => {
     try {
       const storedIntegrations = localStorage.getItem('lotIntegrations')
@@ -117,33 +125,63 @@ export default function LotIntegration() {
     setLoading(false)
   }
 
-  const loadCommercialLots = () => {
+  const loadCommercialLots = async () => {
     try {
+      // Primero intentar cargar desde localStorage (para compatibilidad)
       const storedLots = localStorage.getItem('cattedLots')
       const integratedLotsIds = localStorage.getItem('integratedLots')
+      const integratedIds = integratedLotsIds ? JSON.parse(integratedLotsIds) : []
       
-      if (storedLots) {
-        const lots: any[] = JSON.parse(storedLots)
-        const integratedIds = integratedLotsIds ? JSON.parse(integratedLotsIds) : []
+      let lots: Lot[] = []
+      
+      // Intentar cargar desde API (base de datos)
+      try {
+        const response = await api.get('/cupping/commercial/?estado=aprobado')
+        const cuppings = response.data.results || response.data || []
         
-        // Normalizar la estructura de los lotes para asegurar que tengan lot_id
-        const normalizedLots = lots.map(lot => ({
-          ...lot,
-          lot_id: lot.lot_id || lot.id, // Usar lot_id si existe, sino usar id
-          id: lot.id || lot.lot_id // Asegurar que id también esté disponible
+        // Convertir cataciones a formato de lotes
+        lots = cuppings.map((cupping: any) => ({
+          id: cupping.id,
+          numero_ingreso: cupping.numero_ingreso,
+          peso_quintales: parseFloat(cupping.qq || 0),
+          rendimiento: parseFloat(cupping.rendimiento || 0),
+          humedad: parseFloat(cupping.humedad || 0),
+          apariencia_verde: cupping.apariencia_verde,
+          tueste: cupping.tueste,
+          quakers: cupping.quakers,
+          estado: cupping.estado === 'aprobado' ? 'Aprobado' : cupping.estado,
+          tipo: cupping.tipo,
+          taza: cupping.taza,
+          fecha_catacion: cupping.fecha_catacion,
+          catador: 'Sistema',
+          observaciones: cupping.observaciones,
+          lot_id: `LOTE-${cupping.id}`,
+          isCommercialCupping: true,
+          timestamp: cupping.created_at || new Date().toISOString(),
+          status: cupping.estado
         }))
+      } catch (apiError) {
+        console.warn('No se pudo cargar desde API, intentando localStorage:', apiError)
         
-        // Filtrar solo lotes aprobados que no estén ya integrados
-        const availableLots = normalizedLots.filter(lot => {
-          const isApproved = lot.estado === 'Aprobado'
-          const isNotIntegrated = !integratedIds.includes(lot.lot_id)
-          return isApproved && isNotIntegrated
-        })
-        
-        setCommercialLots(availableLots)
-      } else {
-        setCommercialLots([])
+        // Fallback a localStorage si la API falla
+        if (storedLots) {
+          const localStorageLots: any[] = JSON.parse(storedLots)
+          lots = localStorageLots.map(lot => ({
+            ...lot,
+            lot_id: lot.lot_id || lot.id,
+            id: lot.id || lot.lot_id
+          }))
+        }
       }
+      
+      // Filtrar solo lotes aprobados que no estén ya integrados
+      const availableLots = lots.filter(lot => {
+        const isApproved = lot.estado === 'Aprobado'
+        const isNotIntegrated = !integratedIds.includes(lot.lot_id)
+        return isApproved && isNotIntegrated
+      })
+      
+      setCommercialLots(availableLots)
     } catch (error) {
       console.error('Error loading commercial lots:', error)
       setCommercialLots([])

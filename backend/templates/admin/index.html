@@ -1,0 +1,279 @@
+{% extends "admin/index.html" %}
+{% load static %}
+
+{% block content %}
+{{ block.super }}
+
+<style>
+.dashboard-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 25px;
+    color: white;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.stat-card.temperature {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.stat-card.attendance {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+
+.stat-card.alerts {
+    background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+}
+
+.stat-card.lots {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+}
+
+.stat-card.cupping {
+    background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);
+}
+
+.stat-card.occupation {
+    background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+    color: #333;
+}
+
+.stat-number {
+    font-size: 48px;
+    font-weight: bold;
+    margin: 10px 0;
+}
+
+.stat-label {
+    font-size: 16px;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stat-icon {
+    font-size: 32px;
+    opacity: 0.8;
+}
+
+.recent-events {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-top: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.recent-events h3 {
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.event-item {
+    padding: 15px;
+    border-left: 4px solid #667eea;
+    margin-bottom: 15px;
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.event-time {
+    color: #666;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.event-description {
+    color: #333;
+    font-size: 14px;
+}
+
+.chart-container {
+    background: white;
+    border-radius: 12px;
+    padding: 25px;
+    margin-top: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.dashboard-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.dashboard-subtitle {
+    color: #666;
+    margin-bottom: 30px;
+}
+</style>
+
+<div class="dashboard-container">
+    <h2 class="dashboard-title">📊 Dashboard del Sistema de Beneficio</h2>
+    <p class="dashboard-subtitle">Vista general del sistema en tiempo real</p>
+    
+    <div class="dashboard-stats">
+        <div class="stat-card temperature">
+            <div class="stat-icon">🌡️</div>
+            <div class="stat-number" id="temp-avg">--</div>
+            <div class="stat-label">Temp. Promedio Hoy</div>
+            <small><span id="temp-count">0</span> lecturas</small>
+        </div>
+        
+        <div class="stat-card attendance">
+            <div class="stat-icon">👥</div>
+            <div class="stat-number" id="attendance-count">--</div>
+            <div class="stat-label">Asistencias Hoy</div>
+        </div>
+        
+        <div class="stat-card alerts">
+            <div class="stat-icon">🔔</div>
+            <div class="stat-number" id="alerts-count">--</div>
+            <div class="stat-label">Alertas Activas</div>
+        </div>
+        
+        <div class="stat-card lots">
+            <div class="stat-icon">📦</div>
+            <div class="stat-number" id="lots-count">--</div>
+            <div class="stat-label">Lotes Activos</div>
+        </div>
+        
+        <div class="stat-card cupping">
+            <div class="stat-icon">☕</div>
+            <div class="stat-number" id="cuppings-count">--</div>
+            <div class="stat-label">Cataciones (7d)</div>
+        </div>
+        
+        <div class="stat-card occupation">
+            <div class="stat-icon">🏢</div>
+            <div class="stat-number" id="occupation-count">--</div>
+            <div class="stat-label">Áreas Ocupadas</div>
+        </div>
+    </div>
+    
+    <div class="chart-container">
+        <h3>📈 Temperaturas Últimas 24 Horas</h3>
+        <canvas id="tempChart" width="400" height="100"></canvas>
+    </div>
+    
+    <div class="recent-events">
+        <h3>📋 Eventos Recientes</h3>
+        <div id="events-container">
+            <p style="text-align: center; color: #666;">Cargando eventos...</p>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Fetch dashboard stats (using session authentication from Django admin)
+    fetch('/api/v1/dashboard-stats/', {
+        credentials: 'include'  // Include cookies for session auth
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Update stats
+        document.getElementById('temp-avg').textContent = data.temp_avg + '°C';
+        document.getElementById('temp-count').textContent = data.temp_count;
+        document.getElementById('attendance-count').textContent = data.attendance_today;
+        document.getElementById('alerts-count').textContent = data.active_alerts;
+        document.getElementById('lots-count').textContent = data.active_lots;
+        document.getElementById('cuppings-count').textContent = data.recent_cuppings;
+        document.getElementById('occupation-count').textContent = data.occupied_areas;
+        
+        // Update recent events
+        const eventsContainer = document.getElementById('events-container');
+        if (data.recent_events && data.recent_events.length > 0) {
+            eventsContainer.innerHTML = data.recent_events.map(event => `
+                <div class="event-item">
+                    <div class="event-time">${new Date(event.timestamp).toLocaleString()}</div>
+                    <div class="event-description">${event.description}</div>
+                </div>
+            `).join('');
+        } else {
+            eventsContainer.innerHTML = '<p style="text-align: center; color: #666;">No hay eventos recientes</p>';
+        }
+        
+        // Create temperature chart
+        if (data.temps_24h && data.temps_24h.length > 0) {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            const temps = data.temps_24h.reverse();
+            
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: temps.map(t => new Date(t.timestamp).toLocaleTimeString()),
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: temps.map(t => t.temperature),
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.1,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            title: {
+                                display: true,
+                                text: 'Temperatura (°C)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Hora'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error loading dashboard stats:', error);
+        // Set default values if API fails
+        document.getElementById('temp-avg').textContent = '0°C';
+        document.getElementById('temp-count').textContent = '0';
+        document.getElementById('attendance-count').textContent = '0';
+        document.getElementById('alerts-count').textContent = '0';
+        document.getElementById('lots-count').textContent = '0';
+        document.getElementById('cuppings-count').textContent = '0';
+        document.getElementById('occupation-count').textContent = '0';
+    });
+});
+</script>
+
+{% endblock %}
+

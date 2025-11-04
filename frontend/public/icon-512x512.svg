@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="coffeeGradient512" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5C3317;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+  
+  <!-- Background circle with shadow -->
+  <circle cx="256" cy="256" r="240" fill="url(#coffeeGradient512)" filter="url(#shadow)"/>
+  
+  <!-- Outer ring decoration -->
+  <circle cx="256" cy="256" r="230" 
+          fill="none" 
+          stroke="#D2691E" 
+          stroke-width="3" 
+          opacity="0.4"/>
+  
+  <!-- Coffee bean icon (larger) -->
+  <g transform="translate(256, 256)">
+    <!-- Main coffee bean shape -->
+    <ellipse cx="0" cy="0" rx="120" ry="160" fill="#D2691E" transform="rotate(-20)"/>
+    
+    <!-- Bean crack/line (more detailed) -->
+    <path d="M -40,-130 Q -15,-65 0,0 Q 15,65 40,130" 
+          stroke="#8B4513" 
+          stroke-width="10" 
+          fill="none" 
+          stroke-linecap="round"
+          transform="rotate(-20)"/>
+    
+    <!-- Secondary crack detail -->
+    <path d="M -35,-125 Q -12,-62 2,2 Q 18,68 42,128" 
+          stroke="#6B3410" 
+          stroke-width="4" 
+          fill="none" 
+          stroke-linecap="round"
+          opacity="0.6"
+          transform="rotate(-20)"/>
+    
+    <!-- Highlight (larger) -->
+    <ellipse cx="-40" cy="-50" rx="32" ry="48" 
+             fill="#FFA07A" 
+             opacity="0.5"
+             transform="rotate(-20)"/>
+    
+    <!-- Additional highlight -->
+    <ellipse cx="-50" cy="-60" rx="18" ry="28" 
+             fill="#FFB894" 
+             opacity="0.4"
+             transform="rotate(-20)"/>
+  </g>
+  
+  <!-- Coffee leaf decoration (optional) -->
+  <g transform="translate(150, 120) rotate(-30)">
+    <ellipse cx="0" cy="0" rx="20" ry="35" fill="#228B22" opacity="0.7"/>
+    <path d="M 0,-30 L 0,30" stroke="#1a6b1a" stroke-width="2"/>
+  </g>
+  
+  <!-- Text overlay for branding -->
+  <text x="256" y="450" 
+        font-family="Arial, sans-serif" 
+        font-size="48" 
+        font-weight="bold" 
+        text-anchor="middle" 
+        fill="white"
+        opacity="0.95">BENEFICIO</text>
+  
+  <!-- Subtitle -->
+  <text x="256" y="485" 
+        font-family="Arial, sans-serif" 
+        font-size="24" 
+        text-anchor="middle" 
+        fill="white"
+        opacity="0.8">Café</text>
+</svg>

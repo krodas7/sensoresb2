@@ -116,3 +116,83 @@ def cleanup_old_events():
     except Exception as e:
         logger.error(f"Error in cleanup_old_events task: {e}")
         return f"Error: {e}"
+
+
+@shared_task
+def system_health_check():
+    """Tarea periódica para verificar salud del sistema"""
+    try:
+        from .resilience import HealthChecker
+        from .monitoring import SystemMonitor
+        
+        health = HealthChecker.get_system_health()
+        
+        if not health['healthy']:
+            logger.warning(f"System health check failed: {health}")
+            SystemMonitor.check_and_alert()
+        else:
+            logger.info("System health check passed")
+        
+        # Registrar evento
+        Event.objects.create(
+            event_type='health_check',
+            payload_json=str(health),
+            severity='info' if health['healthy'] else 'warning'
+        )
+        
+        return health
+    except Exception as e:
+        logger.error(f"Error in system_health_check: {e}", exc_info=True)
+        return {'healthy': False, 'error': str(e)}
+
+
+@shared_task
+def auto_backup():
+    """Backup automático de la base de datos"""
+    try:
+        from .backup_service import BackupService
+        
+        backup_service = BackupService()
+        result = backup_service.create_database_backup(automated=True)
+        
+        logger.info(f"Automatic backup completed: {result.get('filename', 'Unknown')}")
+        
+        # Crear evento
+        Event.objects.create(
+            event_type='auto_backup',
+            payload_json=str(result),
+            severity='info'
+        )
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error in auto_backup: {e}", exc_info=True)
+        
+        # Crear alerta de fallo de backup
+        Alert.objects.create(
+            alert_type='backup_failed',
+            rule='Automatic backup failed',
+            destination='admin@beneficio.com',
+            severity='high',
+            description=f'Backup failed at {timezone.now()}: {e}'
+        )
+        
+        return {'success': False, 'error': str(e)}
+
+
+@shared_task(bind=True, max_retries=3)
+def resilient_task_example(self, data):
+    """
+    Ejemplo de tarea resiliente con reintentos automáticos
+    """
+    try:
+        # Tu lógica aquí
+        logger.info(f"Processing task with data: {data}")
+        
+        # Simular procesamiento
+        return {'success': True, 'data': data}
+        
+    except Exception as exc:
+        # Reintentar con backoff exponencial
+        logger.warning(f"Task failed, retrying... Attempt {self.request.retries + 1}/3")
+        raise self.retry(exc=exc, countdown=2 ** self.request.retries)

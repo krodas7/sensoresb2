@@ -17,7 +17,9 @@ import {
   ClipboardDocumentListIcon,
   UserCircleIcon,
   Cog6ToothIcon,
-  ArrowRightOnRectangleIcon
+  ArrowRightOnRectangleIcon,
+  CameraIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline'
 
 export default function Layout() {
@@ -30,6 +32,8 @@ export default function Layout() {
     { path: '/lots', label: 'Lotes', Icon: CubeIcon },
     { path: '/lot-integration', label: 'Integración', Icon: LinkIcon },
     { path: '/suppliers', label: 'Proveedores', Icon: TruckIcon },
+    { path: '/cherry-reception', label: 'Recepción Cereza', Icon: CameraIcon },
+    { path: '/transformation', label: 'Transformación', Icon: ArrowPathIcon },
     { path: '/shipping-weights', label: 'Pesos Envío', Icon: ScaleIcon },
     { path: '/fermentation', label: 'Fermentación', Icon: BeakerIcon },
     { path: '/cupping', label: 'Catación', Icon: SparklesIcon },

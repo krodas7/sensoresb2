@@ -27,6 +27,9 @@ def api_root(request):
             'cupping': '/api/v1/cupping/',
             'employees': '/api/v1/employees/',
             'attendance': '/api/v1/attendance/',
+            'suppliers': '/api/v1/suppliers/',
+            'cherry_reception': '/api/v1/cherry-reception/',
+            'transformation': '/api/v1/transformation/',
             'reports': '/api/v1/reports/',
             'logs': '/api/v1/logs/',
             'notifications': '/api/v1/notifications/',
@@ -56,10 +59,18 @@ urlpatterns = [
     path('api/v1/cupping/', include('apps.cupping.urls')),
     path('api/v1/employees/', include('apps.employees.urls')),
     path('api/v1/attendance/', include('apps.attendance.urls')),
+    path('api/v1/suppliers/', include('apps.suppliers.urls')),
+    path('api/v1/cherry-reception/', include('apps.cherry_reception.urls')),
+    path('api/v1/transformation/', include('apps.transformation.urls')),
+    path('api/v1/inventory/', include('apps.inventory.urls')),
+    path('api/v1/gestions/', include('apps.gestions.urls')),
     path('api/v1/reports/', include('apps.reports.urls')),
-    # path('api/v1/logs/', include('apps.logs.urls')),  # Temporarily disabled for CI compatibility
     path('api/v1/notifications/', include('apps.notifications.urls')),
 ]
+
+# Enable logs URLs if the app is installed (local development)
+if 'apps.logs' in settings.INSTALLED_APPS:
+    urlpatterns.append(path('api/v1/logs/', include('apps.logs.urls')))
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

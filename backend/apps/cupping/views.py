@@ -3,14 +3,26 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.conf import settings
+import json
+import base64
+from io import BytesIO
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib import colors
 from .models import (
     Cupping, CuppingSample, Cupper, CuppingScore, 
-    CuppingDescriptor, CuppingSessionParticipant
+    CuppingDescriptor, CuppingSessionParticipant, CommercialCupping
 )
 from .serializers import (
     CuppingSerializer, CuppingCreateSerializer, CuppingSampleSerializer,
     CupperSerializer, CuppingScoreSerializer, CuppingScoreCreateSerializer,
-    CuppingDescriptorSerializer, CuppingSessionParticipantSerializer
+    CuppingDescriptorSerializer, CuppingSessionParticipantSerializer,
+    CommercialCuppingSerializer
 )
 
 
@@ -205,3 +217,231 @@ class CuppingSessionParticipantViewSet(viewsets.ModelViewSet):
         if cupping_id:
             queryset = queryset.filter(cupping_id=cupping_id)
         return queryset
+
+
+class CommercialCuppingViewSet(viewsets.ModelViewSet):
+    queryset = CommercialCupping.objects.all()
+    serializer_class = CommercialCuppingSerializer
+    
+    @action(detail=False, methods=['post'], url_path='generate-pdf')
+    def generate_pdf(self, request):
+        """Generate stylish professional PDF report for commercial cupping"""
+        try:
+            # Obtener datos del formulario
+            data = json.loads(request.data.get('data', '{}'))
+            photos = []
+            
+            # Procesar fotos
+            for key, value in request.FILES.items():
+                if key.startswith('photo_'):
+                    photos.append(value)
+            
+            # Crear PDF ultra compacto
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15)
+            styles = getSampleStyleSheet()
+            
+            # Estilos con personalidad
+            title_style = ParagraphStyle(
+                'StylishTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                spaceAfter=15,
+                alignment=1,  # Centrado
+                textColor=colors.HexColor('#2c3e50'),
+                fontName='Helvetica-Bold'
+            )
+            
+            subtitle_style = ParagraphStyle(
+                'StylishSubtitle',
+                parent=styles['Heading2'],
+                fontSize=16,
+                spaceAfter=15,
+                textColor=colors.HexColor('#2c3e50'),
+                fontName='Helvetica-Bold'
+            )
+            
+            label_style = ParagraphStyle(
+                'StylishLabel',
+                parent=styles['Normal'],
+                fontSize=12,
+                spaceAfter=8,
+                textColor=colors.HexColor('#34495e'),
+                fontName='Helvetica-Bold'
+            )
+            
+            value_style = ParagraphStyle(
+                'StylishValue',
+                parent=styles['Normal'],
+                fontSize=12,
+                spaceAfter=8,
+                textColor=colors.HexColor('#2c3e50'),
+                fontName='Helvetica'
+            )
+            
+            # Contenido del PDF
+            story = []
+            
+            # Header con estilo
+            header_table = Table([
+                [Paragraph("BENEFICIO SANTO DOMINGO", title_style)]
+            ], colWidths=[7.5*inch])
+            header_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ecf0f1')),
+                ('BOX', (0, 0), (-1, -1), 2, colors.HexColor('#bdc3c7')),
+                ('PADDING', (0, 0), (-1, -1), 20),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ]))
+            
+            story.append(header_table)
+            story.append(Spacer(1, 5))
+            
+            # Información general
+            story.append(Paragraph("INFORMACIÓN GENERAL", subtitle_style))
+            
+            info_data = [
+                ['Número de Ingreso:', data.get('numero_ingreso', 'N/A')],
+                ['Fecha de Catación:', data.get('fecha_catacion', 'N/A')],
+                ['Estado:', data.get('estado', 'N/A')],
+                ['Tipo de Café:', data.get('tipo', 'N/A')],
+                ['QQ (Quintales):', f"{data.get('qq', 'N/A')} QQ"],
+            ]
+            
+            info_table = Table(info_data, colWidths=[1.8*inch, 3.2*inch])
+            info_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8f9fa')),
+                ('BACKGROUND', (1, 0), (1, -1), colors.HexColor('#ffffff')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2c3e50')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e9ecef')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            
+            story.append(info_table)
+            story.append(Spacer(1, 5))
+            
+            # Características del café
+            story.append(Paragraph("CARACTERÍSTICAS DEL CAFÉ", subtitle_style))
+            
+            characteristics_data = [
+                ['Humedad (%):', f"{data.get('humedad', 'N/A')}%"],
+                ['Rendimiento (%):', f"{data.get('rendimiento', 'N/A')}%"],
+                ['Apariencia Verde:', data.get('apariencia_verde', 'N/A')],
+                ['Tueste:', data.get('tueste', 'N/A')],
+                ['Quakers:', data.get('quakers', 'N/A')],
+                ['Evaluación de Taza:', data.get('taza', 'N/A')],
+            ]
+            
+            char_table = Table(characteristics_data, colWidths=[1.8*inch, 3.2*inch])
+            char_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f8f9fa')),
+                ('BACKGROUND', (1, 0), (1, -1), colors.HexColor('#ffffff')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2c3e50')),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#e9ecef')),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ]))
+            
+            story.append(char_table)
+            story.append(Spacer(1, 5))
+            
+            # Observaciones con estilo profesional
+            if data.get('observaciones'):
+                story.append(Paragraph("OBSERVACIONES", subtitle_style))
+                obs_table = Table([
+                    [Paragraph(data.get('observaciones', ''), value_style)]
+                ], colWidths=[6*inch])
+                obs_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8f9fa')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#495057')),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('TOPPADDING', (0, 0), (-1, -1), 10),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 10),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+                    ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#dee2e6')),
+                ]))
+                story.append(obs_table)
+                story.append(Spacer(1, 5))
+            
+            # Fotos con estilo - lado a lado
+            if photos:
+                story.append(Paragraph("FOTOS DEL CAFÉ", subtitle_style))
+                
+                # Crear tabla para colocar fotos lado a lado
+                photo_images = []
+                for i, photo in enumerate(photos[:2]):  # Máximo 2 fotos
+                    try:
+                        photo_data = photo.read()
+                        photo.seek(0)
+                        
+                        # Crear imagen grande y clara
+                        img = Image(BytesIO(photo_data), width=2.8*inch, height=2.2*inch)
+                        photo_images.append(img)
+                    except Exception as e:
+                        print(f"Error procesando foto {i}: {e}")
+                        continue
+                
+                # Si hay fotos, crear tabla para colocarlas lado a lado
+                if photo_images:
+                    if len(photo_images) == 1:
+                        # Una sola foto, centrada
+                        photo_table = Table([[photo_images[0]]], colWidths=[2.8*inch])
+                    else:
+                        # Dos fotos lado a lado
+                        photo_table = Table([photo_images], colWidths=[2.8*inch, 2.8*inch])
+                    
+                    photo_table.setStyle(TableStyle([
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ]))
+                    
+                    story.append(photo_table)
+                    story.append(Spacer(1, 5))
+            
+            # Pie de página con estilo profesional
+            story.append(Spacer(1, 5))
+            footer_table = Table([
+                [Paragraph(f"Reporte generado el: {timezone.localtime().strftime('%d/%m/%Y a las %H:%M')}", value_style)]
+            ], colWidths=[6*inch])
+            footer_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#6c757d')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#495057')),
+            ]))
+            story.append(footer_table)
+            
+            # Construir PDF
+            doc.build(story)
+            
+            # Preparar respuesta
+            buffer.seek(0)
+            response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="Beneficio_Santo_Domingo_{data.get("numero_ingreso", "reporte")}.pdf"'
+            
+            return response
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Error generando PDF: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

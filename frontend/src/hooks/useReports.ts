@@ -62,87 +62,14 @@ export const useReports = () => {
       setLoading(true)
       setError(null)
       
-      // Use mock data for development to avoid authentication issues
-      const mockReports = [
-        {
-          id: 1,
-          name: 'Reporte de Asistencias - 2025-01-24',
-          report_type: 'attendance',
-          format: 'pdf',
-          status: 'completed',
-          created_at: new Date().toISOString(),
-          generated_at: new Date().toISOString(),
-          created_by: 'Sistema',
-          file_url: '/reports/attendance-2025-01-24.pdf',
-          download_count: 5,
-          parameters: { start_date: '2025-01-24', end_date: '2025-01-24' },
-          filters: {}
-        },
-        {
-          id: 2,
-          name: 'Reporte de Cataciones - Enero 2025',
-          report_type: 'cupping',
-          format: 'pdf',
-          status: 'completed',
-          created_at: new Date().toISOString(),
-          generated_at: new Date().toISOString(),
-          created_by: 'Sistema',
-          file_url: '/reports/cupping-2025-01.pdf',
-          download_count: 3,
-          parameters: { start_date: '2025-01-01', end_date: '2025-01-31' },
-          filters: { tipo: 'comercial' }
-        },
-        {
-          id: 3,
-          name: 'Reporte de Pesos de Envío - Enero 2025',
-          report_type: 'shipping_weights',
-          format: 'pdf',
-          status: 'completed',
-          created_at: new Date().toISOString(),
-          generated_at: new Date().toISOString(),
-          created_by: 'Sistema',
-          file_url: '/reports/shipping-weights-2025-01.pdf',
-          download_count: 8,
-          parameters: { start_date: '2025-01-01', end_date: '2025-01-31' },
-          filters: {}
-        },
-        {
-          id: 4,
-          name: 'Reporte de Integraciones - Enero 2025',
-          report_type: 'integrations',
-          format: 'pdf',
-          status: 'completed',
-          created_at: new Date().toISOString(),
-          generated_at: new Date().toISOString(),
-          created_by: 'Sistema',
-          file_url: '/reports/integrations-2025-01.pdf',
-          download_count: 4,
-          parameters: { start_date: '2025-01-01', end_date: '2025-01-31' },
-          filters: {}
-        },
-        {
-          id: 5,
-          name: 'Reporte de Temperaturas - Enero 2025',
-          report_type: 'temperature',
-          format: 'pdf',
-          status: 'generating',
-          created_at: new Date().toISOString(),
-          created_by: 'Sistema',
-          download_count: 0,
-          parameters: { start_date: '2025-01-01', end_date: '2025-01-31' },
-          filters: {}
-        }
-      ]
-      
-      setReports(mockReports)
-      
-      // Uncomment below when backend is ready
-      // const response = await api.get('/reports/')
-      // setReports(response.data.results || response.data)
+      const response = await api.get('/reports/')
+      const data = response.data.results || response.data || []
+      setReports(Array.isArray(data) ? data : [])
       
     } catch (err: any) {
       console.error('Error fetching reports:', err)
       setError(err.response?.data?.message || 'Error cargando reportes')
+      setReports([])
     } finally {
       setLoading(false)
     }
@@ -151,24 +78,20 @@ export const useReports = () => {
   // Fetch report statistics
   const fetchStats = async () => {
     try {
-      // Use mock stats for development to avoid authentication issues
-      const mockStats = {
-        total_reports: 15,
-        completed_reports: 12,
-        failed_reports: 2,
-        total_downloads: 45,
-        most_popular_type: 'attendance',
-        avg_generation_time: 2.5,
-        success_rate: 85.7
-      }
-      setStats(mockStats)
-      
-      // Uncomment below when backend is ready
-      // const response = await api.get('/reports/stats/')
-      // setStats(response.data)
-      
+      const response = await api.get('/reports/stats/')
+      setStats(response.data)
     } catch (err: any) {
       console.error('Error fetching report stats:', err)
+      // Use fallback stats if API fails
+      setStats({
+        total_reports: 0,
+        completed_reports: 0,
+        failed_reports: 0,
+        total_downloads: 0,
+        most_popular_type: 'N/A',
+        avg_generation_time: 0,
+        success_rate: 0
+      })
     }
   }
 
@@ -178,35 +101,29 @@ export const useReports = () => {
       setLoading(true)
       setError(null)
       
-      // Simulate report generation for development
-      const newReport = {
-        id: Date.now(),
-        name: `Reporte de ${getReportTypeName(request.report_type)} - ${new Date().toLocaleDateString()}`,
+      // Transform request to match backend format
+      const payload = {
         report_type: request.report_type,
         format: request.format,
-        status: 'completed' as const,
-        created_at: new Date().toISOString(),
-        generated_at: new Date().toISOString(),
-        created_by: 'Usuario Actual',
-        file_url: `/reports/${request.report_type}-${Date.now()}.pdf`,
-        download_count: 0,
-        parameters: request.parameters,
-        filters: request.filters,
-        isNew: true
+        start_date: request.parameters?.start_date,
+        end_date: request.parameters?.end_date,
+        parameters: request.parameters || {},
+        filters: request.filters || {}
       }
       
-      // Add to reports list
-      setReports(prev => [newReport, ...prev])
+      const response = await api.post('/reports/generate/', payload)
+      await fetchReports()
       
-      // Uncomment below when backend is ready
-      // const response = await api.post('/reports/generate/', request)
-      // await fetchReports()
-      // return response.data
-      
-      return { success: true, report_id: newReport.id, message: 'Reporte generado exitosamente' }
+      return {
+        success: response.data.success || true,
+        report_id: response.data.report_id,
+        message: response.data.message || 'Reporte generado exitosamente'
+      }
       
     } catch (err: any) {
       console.error('Error generating report:', err)
+      console.error('Request payload:', request)
+      console.error('Error details:', err.response?.data)
       setError(err.response?.data?.message || 'Error generando reporte')
       throw err
     } finally {
@@ -416,18 +333,18 @@ export const useReports = () => {
   // Download report
   const downloadReport = async (reportId: number) => {
     try {
+      // Get report data from backend
+      const reportData = await getReportData(reportId)
       const report = reports.find(r => r.id === reportId)
-      if (report) {
-        // Update download count
-        setReports(prev => prev.map(r => 
-          r.id === reportId 
-            ? { ...r, download_count: r.download_count + 1, isNew: false }
-            : r
-        ))
-        
-        // Generate PDF
-        const pdfDoc = generatePDFContent(report)
+      
+      if (report && reportData.data) {
+        // Generate PDF with real data
+        const pdfDoc = generatePDFFromRealData(report, reportData.data)
         pdfDoc.save(`${report.name}.pdf`)
+      } else {
+        // Fallback to basic PDF if no data
+        const pdfDoc = generatePDFContent(report!)
+        pdfDoc.save(`${report!.name}.pdf`)
       }
       
     } catch (err: any) {
@@ -435,6 +352,65 @@ export const useReports = () => {
       setError(err.response?.data?.message || 'Error descargando reporte')
       throw err
     }
+  }
+
+  // Generate PDF from real backend data
+  const generatePDFFromRealData = (report: Report, data: any) => {
+    const doc = new jsPDF()
+    
+    // Header
+    doc.setFontSize(20)
+    doc.setTextColor(40, 167, 69)
+    doc.text('Sistema de Beneficio de Café', 14, 20)
+    
+    doc.setFontSize(16)
+    doc.setTextColor(0, 0, 0)
+    doc.text(report.name, 14, 35)
+    
+    doc.setFontSize(12)
+    doc.text(`Tipo: ${getReportTypeName(report.report_type)}`, 14, 50)
+    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 14, 60)
+    
+    // Add data based on report type
+    let y = 75
+    const lineHeight = 7
+    
+    if (data.employees) {
+      // Attendance report
+      doc.text('Empleados:', 14, y)
+      y += lineHeight
+      
+      const tableData = [['Empleado', 'Horas', 'Horas Extras']]
+      data.employees.forEach((emp: any) => {
+        tableData.push([emp.name, `${emp.hours}`, `${emp.overtime}`])
+      })
+      
+      autoTable(doc, {
+        startY: y,
+        head: [tableData[0]],
+        body: tableData.slice(1),
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [40, 167, 69] }
+      })
+    } else if (data.cuppings) {
+      // Cupping report
+      const tableData = [['Lote', 'Peso (qq)', 'Rendimiento', 'Humedad']]
+      data.cuppings.forEach((cup: any) => {
+        tableData.push([cup.lote, `${cup.peso_qq}`, `${cup.rendimiento}`, `${cup.humedad}`])
+      })
+      
+      autoTable(doc, {
+        startY: y,
+        head: [tableData[0]],
+        body: tableData.slice(1),
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [40, 167, 69] }
+      })
+    } else {
+      doc.text('Datos del reporte no disponibles', 14, y)
+    }
+    
+    return doc
   }
 
   // Get report data for preview
@@ -469,13 +445,8 @@ export const useReports = () => {
   // Delete report
   const deleteReport = async (reportId: number) => {
     try {
-      // Simulate deletion for development
-      setReports(prev => prev.filter(r => r.id !== reportId))
-      
-      // Uncomment below when backend is ready
-      // await api.delete(`/reports/${reportId}/`)
-      // await fetchReports()
-      
+      await api.delete(`/reports/${reportId}/`)
+      await fetchReports()
     } catch (err: any) {
       console.error('Error deleting report:', err)
       setError(err.response?.data?.message || 'Error eliminando reporte')

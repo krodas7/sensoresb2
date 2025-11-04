@@ -55,6 +55,21 @@ interface ActiveWeighingData {
   timestamp: string
 }
 
+interface ActiveSupervisor {
+  supervisor: {
+    id: number
+    name: string
+    shift_type: string
+    phone: string
+    email: string
+    is_active: boolean
+  } | null
+  shift_type: string
+  shift_name: string | null
+  current_time: string
+  message?: string
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalLots: 0,
@@ -67,10 +82,12 @@ export default function Dashboard() {
   const [sensors, setSensors] = useState<SensorData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeWeighing, setActiveWeighing] = useState<ActiveWeighingData | null>(null)
+  const [activeSupervisor, setActiveSupervisor] = useState<ActiveSupervisor | null>(null)
 
   useEffect(() => {
     fetchDashboardData()
     loadActiveWeighing()
+    fetchActiveSupervisor()
     
     // Actualizar temperaturas cada 10 segundos
     const interval = setInterval(() => {
@@ -90,9 +107,15 @@ export default function Dashboard() {
       loadActiveWeighing()
     }, 5000)
     
+    // Verificar supervisor activo cada 30 segundos
+    const supervisorInterval = setInterval(() => {
+      fetchActiveSupervisor()
+    }, 30000)
+    
     return () => {
       clearInterval(interval)
       clearInterval(weighingInterval)
+      clearInterval(supervisorInterval)
     }
   }, [])
 
@@ -114,6 +137,16 @@ export default function Dashboard() {
   const handleCancelWeighing = () => {
     localStorage.removeItem('activeWeighing')
     setActiveWeighing(null)
+  }
+
+  const fetchActiveSupervisor = async () => {
+    try {
+      const response = await api.get('/employees/active-supervisor/')
+      setActiveSupervisor(response.data)
+    } catch (error) {
+      console.error('Error fetching active supervisor:', error)
+      setActiveSupervisor(null)
+    }
   }
 
   const fetchDashboardData = async () => {
@@ -178,9 +211,29 @@ export default function Dashboard() {
               </h1>
               <p className="text-gray-600 mt-1">Panel de Control Principal</p>
             </div>
-            <div className="text-right">
-              <div className="text-sm text-gray-500">Última actualización</div>
-              <div className="text-sm font-medium text-gray-900">{new Date().toLocaleTimeString()}</div>
+            <div className="flex items-center gap-4">
+              {/* Encargado de Turno */}
+              {activeSupervisor && (
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <UserGroupIcon className="h-4 w-4 text-purple-600" />
+                    <span className="text-xs font-medium text-gray-600">Encargado:</span>
+                    {activeSupervisor.supervisor ? (
+                      <span className="text-sm font-semibold text-purple-600">
+                        {activeSupervisor.supervisor.name}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400 italic">
+                        Sin asignar
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="text-right">
+                <div className="text-sm text-gray-500">Última actualización</div>
+                <div className="text-sm font-medium text-gray-900">{new Date().toLocaleTimeString()}</div>
+              </div>
             </div>
           </div>
         </div>

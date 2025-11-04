@@ -291,55 +291,23 @@ export const useLogs = () => {
   // Fetch saved filters
   const fetchFilters = async () => {
     try {
-      // Use mock filters for development
-      const mockFilters = [
-        {
-          id: 1,
-          name: 'Filtro de Errores',
-          filters: { level: 'error' },
-          is_default: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        },
-        {
-          id: 2,
-          name: 'Actividad de Catación',
-          filters: { category: 'cupping' },
-          is_default: false,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-      ]
-      setFilters(mockFilters)
-      
-      // Uncomment below when backend authentication is ready
-      // const response = await api.get('/logs/filters/')
-      // setFilters(response.data)
+      const response = await api.get('/logs/filters/')
+      const data = response.data.results || response.data || []
+      setFilters(Array.isArray(data) ? data : [])
     } catch (err: any) {
       console.error('Error fetching filters:', err)
-      toast.error('Error al cargar filtros guardados')
+      setFilters([])
     }
   }
 
   // Save filter
   const saveFilter = async (filterData: Omit<LogFilter, 'id' | 'created_at' | 'updated_at'>) => {
     try {
-      // Simulate saving filter locally
-      const newFilter = {
-        id: Date.now(),
-        ...filterData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      }
+      const response = await api.post('/logs/filters/', filterData)
+      const newFilter = response.data
       setFilters(prev => [...prev, newFilter])
       toast.success('Filtro guardado exitosamente')
       return newFilter
-      
-      // Uncomment below when backend authentication is ready
-      // const response = await api.post('/logs/filters/', filterData)
-      // setFilters(prev => [...prev, response.data])
-      // toast.success('Filtro guardado exitosamente')
-      // return response.data
     } catch (err: any) {
       console.error('Error saving filter:', err)
       toast.error('Error al guardar filtro')
@@ -350,14 +318,9 @@ export const useLogs = () => {
   // Delete filter
   const deleteFilter = async (filterId: number) => {
     try {
-      // Simulate deleting filter locally
+      await api.delete(`/logs/filters/${filterId}/`)
       setFilters(prev => prev.filter(f => f.id !== filterId))
       toast.success('Filtro eliminado exitosamente')
-      
-      // Uncomment below when backend authentication is ready
-      // await api.delete(`/logs/filters/${filterId}/`)
-      // setFilters(prev => prev.filter(f => f.id !== filterId))
-      // toast.success('Filtro eliminado exitosamente')
     } catch (err: any) {
       console.error('Error deleting filter:', err)
       toast.error('Error al eliminar filtro')
@@ -367,21 +330,10 @@ export const useLogs = () => {
   // Export logs
   const exportLogs = async (exportParams: LogSearchParams & { format?: string }) => {
     try {
-      // Simulate export locally
-      const mockExport = {
-        success: true,
-        export_id: Date.now(),
-        filename: `logs_export_${new Date().toISOString().split('T')[0]}.csv`,
-        record_count: 50,
-        message: 'Exportación simulada exitosa'
-      }
-      toast.success(mockExport.message)
-      return mockExport
-      
-      // Uncomment below when backend authentication is ready
-      // const response = await api.post('/logs/export/', exportParams)
-      // toast.success(response.data.message || 'Exportación iniciada')
-      // return response.data
+      const response = await api.post('/logs/export/', exportParams)
+      toast.success(response.data.message || 'Exportación iniciada exitosamente')
+      fetchExports() // Actualizar lista de exportaciones
+      return response.data
     } catch (err: any) {
       console.error('Error exporting logs:', err)
       toast.error('Error al exportar logs')
@@ -392,37 +344,12 @@ export const useLogs = () => {
   // Fetch exports
   const fetchExports = async () => {
     try {
-      // Use mock exports for development
-      const mockExports = [
-        {
-          id: 1,
-          user: { id: 1, username: 'admin', display_name: 'Administrador' },
-          filename: 'logs_export_2025-01-25.csv',
-          format: 'csv',
-          filters: { level: 'error' },
-          record_count: 15,
-          file_path: '/exports/logs_export_2025-01-25.csv',
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 2,
-          user: { id: 2, username: 'catador1', display_name: 'Juan Pérez' },
-          filename: 'logs_export_2025-01-24.csv',
-          format: 'csv',
-          filters: { category: 'cupping' },
-          record_count: 25,
-          file_path: '/exports/logs_export_2025-01-24.csv',
-          created_at: new Date().toISOString()
-        }
-      ]
-      setExports(mockExports)
-      
-      // Uncomment below when backend authentication is ready
-      // const response = await api.get('/logs/exports/')
-      // setExports(response.data)
+      const response = await api.get('/logs/exports/')
+      const data = response.data.results || response.data || []
+      setExports(Array.isArray(data) ? data : [])
     } catch (err: any) {
       console.error('Error fetching exports:', err)
-      toast.error('Error al cargar exportaciones')
+      setExports([])
     }
   }
 

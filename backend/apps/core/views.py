@@ -6,6 +6,9 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from django.utils import timezone
 from django.contrib.auth import authenticate
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.http import JsonResponse
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User, Parameter, Event, Alert, UserRole, ModulePermission, UserProfile
 from .serializers import (
@@ -51,13 +54,13 @@ def login(request):
     try:
         username = request.data.get('username')
         password = request.data.get('password')
-
+        
         if not username or not password:
             return ErrorResponse.bad_request(
                 'Usuario y contraseña son requeridos',
                 {'missing_fields': ['username', 'password']}
             )
-
+        
         user = authenticate(username=username, password=password)
         if user and user.is_active:
             refresh = RefreshToken.for_user(user)
@@ -462,3 +465,61 @@ def initialize_default_roles(request):
             'Error inicializando roles por defecto',
             {'error_type': 'role_initialization_error', 'error': str(e)}
         )
+
+@extend_schema(
+    tags=['Dashboard'],
+    summary='Estadísticas del Dashboard',
+    description='Obtiene estadísticas en tiempo real para el dashboard del admin',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        500: OpenApiTypes.OBJECT
+    }
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_stats(request):
+    """Get dashboard statistics - Accepts both JWT and session authentication"""
+    # Check if user is authenticated (either via JWT or session)
+    if not request.user.is_authenticated:
+        return Response({
+            'error': True,
+            'message': 'Authentication required'
+        }, status=401)
+    
+    try:
+        from .admin_dashboard import get_dashboard_stats
+        stats = get_dashboard_stats()
+        
+        return Response({
+            'success': True,
+            **stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting dashboard stats: {str(e)}", exc_info=True)
+        return ErrorResponse.server_error(
+            'Error obteniendo estadísticas del dashboard',
+            {'error_type': 'dashboard_stats_error', 'error': str(e)}
+        )
+
+
+@extend_schema(
+    tags=['Dashboard Avanzado'],
+    summary='Dashboard Avanzado',
+    description='Vista del dashboard avanzado del admin',
+    responses={
+        200: OpenApiTypes.OBJECT,
+        500: OpenApiTypes.OBJECT
+    }
+)
+@login_required
+def advanced_dashboard_view(request):
+    """Vista del dashboard avanzado"""
+    try:
+        return render(request, 'admin/advanced_dashboard.html')
+    except Exception as e:
+        logger.error(f"Error loading advanced dashboard: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'error': True,
+            'message': 'Error cargando dashboard avanzado',
+            'details': str(e)
+        }, status=500)

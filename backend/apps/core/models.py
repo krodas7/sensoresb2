@@ -308,3 +308,7 @@ class UserProfile(models.Model):
         accessible.update(custom_modules)
         
         return list(accessible)
+
+
+# Import backup models to make them available
+from .backup_models import BackupRecord, BackupSchedule

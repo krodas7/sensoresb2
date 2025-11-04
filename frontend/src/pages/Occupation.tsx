@@ -25,62 +25,29 @@ interface Area {
   employee_name?: string
 }
 
-const mockAreas: Area[] = [
-  {
-    id: 1,
-    name: 'Área de Secado 1',
-    capacity: 100,
-    current_occupancy: 75,
-    status: 'occupied',
-    last_updated: '2024-01-15T10:30:00Z',
-    lot_id: 1234,
-    lot_name: 'Lote #1234',
-    employee_name: 'Juan Pérez'
-  },
-  {
-    id: 2,
-    name: 'Área de Secado 2',
-    capacity: 80,
-    current_occupancy: 0,
-    status: 'available',
-    last_updated: '2024-01-15T09:15:00Z'
-  },
-  {
-    id: 3,
-    name: 'Área de Almacenamiento',
-    capacity: 200,
-    current_occupancy: 150,
-    status: 'occupied',
-    last_updated: '2024-01-15T11:45:00Z',
-    lot_id: 1235,
-    lot_name: 'Lote #1235',
-    employee_name: 'María García'
-  },
-  {
-    id: 4,
-    name: 'Área de Procesamiento',
-    capacity: 50,
-    current_occupancy: 0,
-    status: 'maintenance',
-    last_updated: '2024-01-15T08:00:00Z'
-  },
-  {
-    id: 5,
-    name: 'Área de Control de Calidad',
-    capacity: 30,
-    current_occupancy: 25,
-    status: 'occupied',
-    last_updated: '2024-01-15T12:00:00Z',
-    lot_id: 1236,
-    lot_name: 'Lote #1236',
-    employee_name: 'Carlos López'
-  }
-]
+// Helper para convertir datos de la API al formato esperado
+const transformOccupationData = (apiData: any): Area[] => {
+  return apiData.map((item: any) => ({
+    id: item.area_id,
+    name: item.area_name,
+    capacity: 100, // Capacidad por defecto, se puede ajustar si hay campo en API
+    current_occupancy: item.status === 'ocupado' ? 50 : 0,
+    status: 
+      item.status === 'ocupado' ? 'occupied' :
+      item.status === 'mantenimiento' ? 'maintenance' :
+      'available',
+    last_updated: item.timestamp || new Date().toISOString(),
+    lot_id: item.lot_code ? parseInt(item.lot_code) : undefined,
+    lot_name: item.lot_code ? `Lote #${item.lot_code}` : undefined,
+    employee_name: item.lot_finca || undefined
+  }))
+}
 
-const AreaCard = ({ area, onEdit, onDelete }: { 
+const AreaCard = ({ area, onEdit, onDelete, onForceOccupation }: { 
   area: Area
   onEdit: (area: Area) => void
   onDelete: (area: Area) => void
+  onForceOccupation: (areaId: number, status: string) => void
 }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -180,10 +147,38 @@ const AreaCard = ({ area, onEdit, onDelete }: {
               <span className="text-sm font-medium text-blue-800">{area.lot_name}</span>
             </div>
             {area.employee_name && (
-              <p className="text-xs text-blue-600 mt-1">Responsable: {area.employee_name}</p>
+              <p className="text-xs text-blue-600 mt-1">Finca: {area.employee_name}</p>
             )}
           </div>
         )}
+        
+        {/* Manual Control Buttons */}
+        <div className="flex gap-2 mt-4">
+          {area.status !== 'available' && (
+            <button
+              onClick={() => onForceOccupation(area.id, 'libre')}
+              className="flex-1 px-3 py-2 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600 transition-colors"
+            >
+              Liberar
+            </button>
+          )}
+          {area.status !== 'occupied' && (
+            <button
+              onClick={() => onForceOccupation(area.id, 'ocupado')}
+              className="flex-1 px-3 py-2 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Ocupar
+            </button>
+          )}
+          {area.status !== 'maintenance' && (
+            <button
+              onClick={() => onForceOccupation(area.id, 'mantenimiento')}
+              className="flex-1 px-3 py-2 bg-yellow-500 text-white text-xs font-medium rounded-lg hover:bg-yellow-600 transition-colors"
+            >
+              Mantenimiento
+            </button>
+          )}
+        </div>
 
         {/* Maintenance Notice */}
         {area.status === 'maintenance' && (
@@ -201,7 +196,7 @@ const AreaCard = ({ area, onEdit, onDelete }: {
 }
 
 export default function Occupation() {
-  const [areas, setAreas] = useState<Area[]>(mockAreas)
+  const [areas, setAreas] = useState<Area[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedArea, setSelectedArea] = useState<Area | null>(null)
@@ -209,27 +204,59 @@ export default function Occupation() {
   useEffect(() => {
     const fetchAreas = async () => {
       try {
-        // Simular carga de datos
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        setAreas(mockAreas)
+        setIsLoading(true)
+        // Obtener resumen de ocupación desde la API
+        const response = await api.get('/occupation/summary/')
+        const apiData = response.data
+        
+        // Transformar datos de la API al formato esperado
+        const transformedAreas = transformOccupationData(apiData)
+        setAreas(transformedAreas)
       } catch (error) {
         console.error('Error fetching areas:', error)
+        setAreas([])
       } finally {
         setIsLoading(false)
       }
     }
 
     fetchAreas()
+    
+    // Recargar cada 30 segundos para ver cambios en tiempo real
+    const interval = setInterval(fetchAreas, 30000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleEdit = (area: Area) => {
     setSelectedArea(area)
-    // Aquí se abriría un modal de edición
+    setShowAddModal(true)
   }
 
-  const handleDelete = (area: Area) => {
+  const handleDelete = async (area: Area) => {
     if (window.confirm(`¿Estás seguro de que quieres eliminar ${area.name}?`)) {
-      setAreas(areas.filter(a => a.id !== area.id))
+      try {
+        // Aquí podrías llamar a la API para eliminar si existe ese endpoint
+        // await api.delete(`/occupation/${area.id}/`)
+        setAreas(areas.filter(a => a.id !== area.id))
+      } catch (error) {
+        console.error('Error deleting area:', error)
+      }
+    }
+  }
+  
+  const handleForceOccupation = async (areaId: number, status: string) => {
+    try {
+      await api.post('/occupation/force/', {
+        area_id: areaId,
+        status: status,
+        reason: 'Cambio manual'
+      })
+      // Recargar datos
+      const response = await api.get('/occupation/summary/')
+      const transformedAreas = transformOccupationData(response.data)
+      setAreas(transformedAreas)
+    } catch (error) {
+      console.error('Error forcing occupation:', error)
     }
   }
 
@@ -342,6 +369,7 @@ export default function Occupation() {
             area={area}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onForceOccupation={handleForceOccupation}
           />
         ))}
       </div>

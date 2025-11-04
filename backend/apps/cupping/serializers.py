@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Cupping, CuppingSample, Cupper, CuppingScore, 
-    CuppingDescriptor, CuppingSessionParticipant
+    CuppingDescriptor, CuppingSessionParticipant, CommercialCupping
 )
 
 
@@ -65,7 +65,7 @@ class CuppingCreateSerializer(serializers.ModelSerializer):
         model = Cupping
         fields = [
             'name', 'protocol', 'blinding', 'label_type', 'language',
-            'description', 'is_calibration', 'is_realtime', 'date'
+            'description', 'is_calibration', 'is_realtime', 'date', 'creator', 'status'
         ]
 
 
@@ -90,3 +90,11 @@ class CuppingScoreCreateSerializer(serializers.ModelSerializer):
             CuppingDescriptor.objects.create(score=score, **descriptor_data)
         
         return score
+
+
+class CommercialCuppingSerializer(serializers.ModelSerializer):
+    """Serializer for commercial cupping"""
+    class Meta:
+        model = CommercialCupping
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']

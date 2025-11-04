@@ -1,12 +1,24 @@
 from django.contrib import admin
-from .models import Employee, Shift, ShiftAssignment
+from .models import Employee, Shift, ShiftAssignment, Supervisor
+
+
+@admin.register(Supervisor)
+class SupervisorAdmin(admin.ModelAdmin):
+    list_display = ('name', 'shift_type', 'phone', 'is_active', 'get_employee_count')
+    list_filter = ('is_active', 'shift_type')
+    search_fields = ('name', 'email', 'phone')
+    
+    def get_employee_count(self, obj):
+        return obj.employees.filter(is_active=True).count()
+    get_employee_count.short_description = 'Empleados Activos'
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'dpi', 'position', 'is_active', 'assigned_area')
-    list_filter = ('is_active', 'position', 'assigned_area')
+    list_display = ('name', 'dpi', 'position', 'supervisor', 'is_active', 'assigned_area')
+    list_filter = ('is_active', 'position', 'assigned_area', 'supervisor')
     search_fields = ('name', 'dpi', 'email')
+    raw_id_fields = ('supervisor',)
 
 
 @admin.register(Shift)

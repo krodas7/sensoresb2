@@ -298,113 +298,108 @@ export default function Reports() {
             </div>
           </div>
 
-          {/* Lista de reportes */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {filteredReports.map((report) => (
-              <div key={report.id} className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center">
-                    {getReportTypeIcon(report.report_type)}
-                    <div className="ml-2">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{report.name}</h3>
-                        {report.isNew && (
-                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
-                            Nuevo
-                        </span>
-                      )}
+          {/* Lista de reportes en tabla */}
+          <div className="bg-white rounded-lg shadow overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Nombre
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Tipo
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Formato
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Descargas
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filteredReports.map((report) => (
+                  <tr key={report.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-8 w-8 text-gray-600">
+                          {getReportTypeIcon(report.report_type)}
+                        </div>
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-gray-900">{report.name}</div>
+                          <div className="text-sm text-gray-500">Por: Usuario {report.created_by}</div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center ${getStatusColor(report.status)}`}>
-                      {getStatusIcon(report.status)}
-                      <span className="ml-1">{getStatusText(report.status)}</span>
-                    </span>
-                    <button
-                      onClick={() => handleDeleteReport(report.id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                      title="Eliminar reporte"
-                    >
-                      <XMarkIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Tipo:</span>
-                    <span className="font-medium">{getReportTypeName(report.report_type)}</span>
-              </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Formato:</span>
-                    <span className="font-medium uppercase">{report.format}</span>
-          </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Creado por:</span>
-                    <span className="font-medium">{report.created_by}</span>
-              </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Fecha:</span>
-                    <span className="font-medium">{new Date(report.created_at).toLocaleDateString()}</span>
-          </div>
-
-                  {report.generated_at && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Generado:</span>
-                      <span className="font-medium">{new Date(report.generated_at).toLocaleDateString()}</span>
-                    </div>
-                  )}
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Descargas:</span>
-                    <span className="font-medium">{report.download_count}</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex gap-2">
-                  {report.status === 'completed' && (
-                    <>
-                    <button
-                        onClick={() => handleViewReport(report)}
-                        className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm hover:bg-blue-700 flex items-center justify-center gap-1"
-                    >
-                        <EyeIcon className="h-4 w-4" />
-                        Ver
-                    </button>
-                    <button
-                        onClick={() => handleDownloadReport(report.id)}
-                        className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm hover:bg-green-700 flex items-center justify-center gap-1"
-                    >
-                        <ArrowDownTrayIcon className="h-4 w-4" />
-                        Descargar
-                    </button>
-                    </>
-                  )}
-                  {report.status === 'failed' && (
-                    <button
-                      onClick={() => {
-                        // Regenerate report logic
-                        toast.info('Funcionalidad de regeneración en desarrollo')
-                      }}
-                      className="w-full bg-yellow-600 text-white px-3 py-2 rounded text-sm hover:bg-yellow-700 flex items-center justify-center gap-1"
-                    >
-                      <ExclamationTriangleIcon className="h-4 w-4" />
-                      Regenerar
-                    </button>
-                  )}
-                  {report.status === 'generating' && (
-                    <div className="w-full bg-gray-100 text-gray-600 px-3 py-2 rounded text-sm flex items-center justify-center gap-1">
-                      <ClockIcon className="h-4 w-4" />
-                      Generando...
-                </div>
-                )}
-                </div>
-              </div>
-            ))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">{getReportTypeName(report.report_type)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(report.status)}`}>
+                        {getStatusIcon(report.status)}
+                        <span className="ml-1">{getStatusText(report.status)}</span>
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {report.format.toUpperCase()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(report.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {report.download_count}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end gap-2">
+                        {report.status === 'completed' && (
+                          <>
+                            <button
+                              onClick={() => handleViewReport(report)}
+                              className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors"
+                              title="Ver reporte"
+                            >
+                              <EyeIcon className="h-5 w-5" />
+                            </button>
+                            <button
+                              onClick={() => handleDownloadReport(report.id)}
+                              className="text-green-600 hover:text-green-900 p-1 rounded-md hover:bg-green-50 transition-colors"
+                              title="Descargar reporte"
+                            >
+                              <ArrowDownTrayIcon className="h-5 w-5" />
+                            </button>
+                          </>
+                        )}
+                        {report.status === 'failed' && (
+                          <button
+                            onClick={() => toast.info('Funcionalidad de regeneración en desarrollo')}
+                            className="text-yellow-600 hover:text-yellow-900 p-1 rounded-md hover:bg-yellow-50 transition-colors"
+                            title="Regenerar reporte"
+                          >
+                            <ExclamationTriangleIcon className="h-5 w-5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteReport(report.id)}
+                          className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
+                          title="Eliminar reporte"
+                        >
+                          <XMarkIcon className="h-5 w-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           {filteredReports.length === 0 && !loading && (

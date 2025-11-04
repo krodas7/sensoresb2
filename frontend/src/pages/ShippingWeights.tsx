@@ -203,12 +203,14 @@ export default function ShippingWeights() {
   const [activeIntegration, setActiveIntegration] = useState<IntegrationWeighing | null>(null)
   const [showWeighingModal, setShowWeighingModal] = useState(false)
   const [selectedPartidaForWeighing, setSelectedPartidaForWeighing] = useState<PartidaPesaje | null>(null)
+  const [editingWeighing, setEditingWeighing] = useState<Pesaje | null>(null)
   const [weighingForm, setWeighingForm] = useState({
     pesoBruto: '',
     tara: '',
     bultos: '',
     observaciones: '',
-    operador: 'Operador 1'
+    operador: 'Operador 1',
+    tipoTara: 'yute' as 'yute' | 'nylon' | 'manual'
   })
   
   const { showSuccess, showError, showWarning, showInfo } = useNotifications()
@@ -1380,9 +1382,53 @@ export default function ShippingWeights() {
     }
 
     const pesoNeto = pesoBruto - tara
+    
+    // Si estamos editando, actualizar el pesaje existente
+    if (editingWeighing) {
+      const updatedPartidas = partidas.map(partida => {
+        if (partida.id === selectedPartidaForWeighing.id) {
+          const updatedPesajes = partida.pesajes.map(pesaje => {
+            if (pesaje.id === editingWeighing.id) {
+              return {
+                ...pesaje,
+                taraType: weighingForm.tipoTara,
+                taraWeight: tara / bultos,
+                bultosCount: bultos,
+                totalTaraWeight: tara,
+                grossWeight: pesoBruto,
+                netWeight: pesoNeto,
+                operator: weighingForm.operador,
+                notes: weighingForm.observaciones
+              }
+            }
+            return pesaje
+          })
+          
+          const newPesoTotal = updatedPesajes.reduce((sum, pesaje) => sum + pesaje.netWeight, 0)
+          
+          return {
+            ...partida,
+            pesajes: updatedPesajes,
+            pesoTotalRegistrado: newPesoTotal,
+            isCompleted: newPesoTotal >= partida.pesoEsperado * 100
+          }
+        }
+        return partida
+      })
+
+      setPartidas(updatedPartidas)
+      setEditingWeighing(null)
+      setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1', tipoTara: 'yute' })
+      setShowWeighingModal(false)
+      setSelectedPartidaForWeighing(null)
+      showSuccess('Pesaje actualizado correctamente')
+      return
+    }
+    
+    // Si no estamos editando, crear nuevo pesaje
     const newPesaje: Pesaje = {
       id: Date.now(),
-      taraType: 'yute', // Por defecto, se puede cambiar después
+      taraType: weighingForm.tipoTara,
       taraWeight: tara / bultos, // Tara por bulto
       bultosCount: bultos,
       totalTaraWeight: tara,
@@ -1412,11 +1458,31 @@ export default function ShippingWeights() {
     })
 
     setPartidas(updatedPartidas)
-    setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1' })
+    setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1', tipoTara: 'yute' })
     setShowWeighingModal(false)
     setSelectedPartidaForWeighing(null)
 
-    showSuccess(`Pesaje registrado: ${newPesaje.netWeight} lbs para la partida ${selectedPartidaForWeighing.numeroIngreso}`)
+    showSuccess(`Pesaje registrado: ${newPesaje.netWeight.toFixed(2)} lbs para la partida ${selectedPartidaForWeighing.numeroIngreso}`)
+  }
+  
+  const deleteWeighing = (partidaId: string, pesajeId: number) => {
+    const updatedPartidas = partidas.map(partida => {
+      if (partida.id === partidaId) {
+        const updatedPesajes = partida.pesajes.filter(pesaje => pesaje.id !== pesajeId)
+        const newPesoTotal = updatedPesajes.reduce((sum, pesaje) => sum + pesaje.netWeight, 0)
+        
+        return {
+          ...partida,
+          pesajes: updatedPesajes,
+          pesoTotalRegistrado: newPesoTotal,
+          isCompleted: newPesoTotal >= partida.pesoEsperado * 100
+        }
+      }
+      return partida
+    })
+
+    setPartidas(updatedPartidas)
+    showSuccess('Pesaje eliminado correctamente')
   }
 
   const changeIngreso = (ingresoId: string) => {
@@ -1435,8 +1501,189 @@ export default function ShippingWeights() {
     setIntegrations(updatedIntegrations)
   }
 
+  const generateShipmentReport = () => {
+    if (!activeIntegration || partidas.length === 0) return
+
+    // Calcular totales
+    const totalEsperado = partidas.reduce((sum, p) => sum + p.pesoEsperado, 0)
+    const totalRegistrado = partidas.reduce((sum, p) => sum + p.pesoTotalRegistrado, 0) / 100 // Convertir a qq
+    const diferencia = totalRegistrado - totalEsperado
+    const porcentajeCumplimiento = (totalRegistrado / totalEsperado * 100).toFixed(2)
+
+    // Crear contenido HTML para el PDF
+    const reportHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; }
+          h1 { color: #1e40af; text-align: center; border-bottom: 3px solid #1e40af; padding-bottom: 10px; }
+          h2 { color: #059669; margin-top: 30px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+          .info-box { background: #f3f4f6; padding: 15px; border-radius: 8px; }
+          .info-label { font-weight: bold; color: #6b7280; font-size: 12px; }
+          .info-value { font-size: 18px; color: #111827; margin-top: 5px; }
+          table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          th { background: #1e40af; color: white; padding: 12px; text-align: left; }
+          td { padding: 10px; border-bottom: 1px solid #e5e7eb; }
+          tr:hover { background: #f9fafb; }
+          .totals { background: #ecfdf5; padding: 20px; border-radius: 8px; margin-top: 20px; }
+          .totals-row { display: flex; justify-content: space-between; margin: 10px 0; font-size: 16px; }
+          .totals-label { font-weight: bold; }
+          .grand-total { background: #059669; color: white; padding: 15px; border-radius: 8px; margin-top: 10px; }
+          .status-success { color: #059669; font-weight: bold; }
+          .status-warning { color: #f59e0b; font-weight: bold; }
+          .status-error { color: #dc2626; font-weight: bold; }
+          .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #6b7280; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>☕ REPORTE EJECUTIVO DE ENVÍO</h1>
+          <p style="color: #6b7280; margin-top: 10px;">
+            ${activeIntegration.name} - ${activeIntegration.destination}
+          </p>
+          <p style="color: #6b7280;">Fecha: ${new Date().toLocaleDateString('es-GT', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="info-label">CLIENTE</div>
+            <div class="info-value">${activeIntegration.client}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">DESTINO</div>
+            <div class="info-value">${activeIntegration.destination}</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">PESO ESPERADO</div>
+            <div class="info-value">${totalEsperado.toFixed(2)} qq</div>
+          </div>
+          <div class="info-box">
+            <div class="info-label">PESO REGISTRADO</div>
+            <div class="info-value" style="color: ${diferencia >= 0 ? '#059669' : '#dc2626'}">${totalRegistrado.toFixed(2)} qq</div>
+          </div>
+        </div>
+
+        <h2>📊 Detalle de Pesajes por Partida</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Partida</th>
+              <th>Peso Esperado</th>
+              <th>Peso Registrado</th>
+              <th>Bultos</th>
+              <th>Tara Total</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${partidas.map(partida => `
+              <tr>
+                <td style="font-weight: bold;">${partida.numeroIngreso}</td>
+                <td>${partida.pesoEsperado.toFixed(2)} qq</td>
+                <td style="color: #059669; font-weight: bold;">${(partida.pesoTotalRegistrado / 100).toFixed(2)} qq</td>
+                <td>${partida.pesajes.reduce((sum, p) => sum + p.bultosCount, 0)}</td>
+                <td>${partida.pesajes.reduce((sum, p) => sum + p.totalTaraWeight, 0).toFixed(3)} qq</td>
+                <td class="${partida.isCompleted ? 'status-success' : 'status-warning'}">
+                  ${partida.isCompleted ? 'Completada' : 'En Progreso'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <h2>📋 Detalle Completo de Pesajes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Partida</th>
+              <th>Fecha/Hora</th>
+              <th>Peso Bruto</th>
+              <th>Bultos</th>
+              <th>Tara</th>
+              <th>Peso Neto</th>
+              <th>Operador</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${partidas.flatMap(partida => 
+              partida.pesajes.map(pesaje => `
+                <tr>
+                  <td>${partida.numeroIngreso}</td>
+                  <td>${pesaje.date} ${pesaje.time}</td>
+                  <td>${pesaje.grossWeight.toFixed(2)} qq</td>
+                  <td>${pesaje.bultosCount}</td>
+                  <td>${pesaje.totalTaraWeight.toFixed(3)} qq</td>
+                  <td style="color: #059669; font-weight: bold;">${pesaje.netWeight.toFixed(2)} qq</td>
+                  <td>${pesaje.operator}</td>
+                </tr>
+              `)
+            ).join('')}
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <h2 style="margin-top: 0;">📈 Resumen Ejecutivo</h2>
+          <div class="totals-row">
+            <span class="totals-label">Total Peso Esperado:</span>
+            <span>${totalEsperado.toFixed(2)} qq</span>
+          </div>
+          <div class="totals-row">
+            <span class="totals-label">Total Peso Registrado:</span>
+            <span style="color: #059669;">${totalRegistrado.toFixed(2)} qq</span>
+          </div>
+          <div class="totals-row">
+            <span class="totals-label">Diferencia:</span>
+            <span class="${diferencia >= 0 ? 'status-success' : 'status-error'}">
+              ${diferencia >= 0 ? '+' : ''}${diferencia.toFixed(2)} qq
+            </span>
+          </div>
+          <div class="totals-row">
+            <span class="totals-label">Porcentaje de Cumplimiento:</span>
+            <span class="${parseFloat(porcentajeCumplimiento) >= 100 ? 'status-success' : 'status-warning'}">
+              ${porcentajeCumplimiento}%
+            </span>
+          </div>
+          <div class="totals-row">
+            <span class="totals-label">Total de Pesajes:</span>
+            <span>${partidas.reduce((sum, p) => sum + p.pesajes.length, 0)}</span>
+          </div>
+          <div class="totals-row">
+            <span class="totals-label">Total de Bultos:</span>
+            <span>${partidas.flatMap(p => p.pesajes).reduce((sum, p) => sum + p.bultosCount, 0)}</span>
+          </div>
+        </div>
+
+        <div class="footer">
+          <p>Sistema de Beneficio de Café - Reporte generado automáticamente</p>
+          <p>${new Date().toLocaleString('es-GT')}</p>
+        </div>
+      </body>
+      </html>
+    `
+
+    // Crear y descargar PDF
+    const printWindow = window.open('', '_blank')
+    if (printWindow) {
+      printWindow.document.write(reportHTML)
+      printWindow.document.close()
+      printWindow.focus()
+      setTimeout(() => {
+        printWindow.print()
+      }, 250)
+    }
+
+    showSuccess('Reporte generado correctamente')
+  }
+
   const finishWeighing = () => {
     if (!activeIntegration) return
+
+    // Generar reporte antes de finalizar
+    generateShipmentReport()
 
     const updatedIntegration = {
       ...activeIntegration,
@@ -1450,7 +1697,7 @@ export default function ShippingWeights() {
     )
     setIntegrations(updatedIntegrations)
 
-    showSuccess('Pesaje finalizado exitosamente')
+    showSuccess('Pesaje finalizado exitosamente. Reporte generado.')
   }
 
   const cancelWeighing = () => {
@@ -1974,12 +2221,15 @@ export default function ShippingWeights() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Operador
                         </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Acciones
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {partidas.flatMap(partida => 
                         partida.pesajes.map(pesaje => (
-                          <tr key={pesaje.id}>
+                          <tr key={pesaje.id} className="hover:bg-gray-50">
                             <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                               {partida.numeroIngreso}
                             </td>
@@ -2001,12 +2251,136 @@ export default function ShippingWeights() {
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                               {pesaje.operator}
                             </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    // Cargar datos del pesaje en el formulario para editar
+                                    setSelectedPartidaForWeighing(partida)
+                                    setWeighingForm({
+                                      pesoBruto: pesaje.grossWeight.toString(),
+                                      tara: pesaje.totalTaraWeight.toString(),
+                                      bultos: pesaje.bultosCount.toString(),
+                                      observaciones: pesaje.notes || '',
+                                      operador: pesaje.operator,
+                                      tipoTara: 'manual'
+                                    })
+                                    setEditingWeighing(pesaje)
+                                    setShowWeighingModal(true)
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 font-medium"
+                                  title="Editar pesaje"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm('¿Estás seguro de eliminar este pesaje?')) {
+                                      deleteWeighing(partida.id, pesaje.id)
+                                    }
+                                  }}
+                                  className="text-red-600 hover:text-red-800 font-medium"
+                                  title="Eliminar pesaje"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))
                       )}
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* Selector de Partida para Agregar Pesaje */}
+            {partidas.length > 0 && (
+              <div className="bg-white rounded-lg shadow-md p-6 mt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <ScaleIcon className="h-5 w-5 text-blue-600" />
+                  Seleccionar Partida para Pesar
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {partidas.map((partida) => (
+                    <div
+                      key={partida.id}
+                      className={`border-2 rounded-lg p-4 cursor-pointer transition-all hover:shadow-lg ${
+                        selectedPartidaForWeighing?.id === partida.id
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                      onClick={() => {
+                        setSelectedPartidaForWeighing(partida)
+                        setShowWeighingModal(true)
+                      }}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-lg">
+                            Partida {partida.numeroIngreso}
+                          </h4>
+                          <p className="text-sm text-gray-500">{partida.tipo}</p>
+                        </div>
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            partida.isCompleted
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}
+                        >
+                          {partida.isCompleted ? 'Completada' : 'En Progreso'}
+                        </span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Esperado:</span>
+                          <span className="font-semibold text-gray-900">{partida.pesoEsperado.toFixed(2)} qq</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Registrado:</span>
+                          <span className="font-semibold text-green-600">
+                            {(partida.pesoTotalRegistrado / 100).toFixed(2)} qq
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">Pesajes:</span>
+                          <span className="font-semibold text-gray-900">{partida.pesajes.length}</span>
+                        </div>
+                        
+                        {/* Barra de progreso */}
+                        <div className="mt-3">
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full transition-all ${
+                                partida.isCompleted ? 'bg-green-500' : 'bg-blue-500'
+                              }`}
+                              style={{
+                                width: `${Math.min(
+                                  (partida.pesoTotalRegistrado / 100 / partida.pesoEsperado) * 100,
+                                  100
+                                )}%`
+                              }}
+                            />
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1 text-right">
+                            {((partida.pesoTotalRegistrado / 100 / partida.pesoEsperado) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <button className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 font-medium">
+                        <PlusIcon className="h-4 w-4" />
+                        Agregar Pesaje
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm text-gray-500 mt-4 text-center">
+                  Click en una tarjeta de partida para agregar un nuevo pesaje
+                </p>
               </div>
             )}
           </div>
@@ -2168,28 +2542,67 @@ export default function ShippingWeights() {
             {/* Header del pesaje activo - Versión simplificada */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="text-lg font-semibold text-blue-900 flex items-center">
                     <ScaleIcon className="h-5 w-5 mr-2" />
                     Pesaje en Progreso
                   </h3>
-                  <p className="text-sm text-blue-700 mt-1">
+                  <p className="text-sm text-blue-700 mt-1 mb-3">
                     Integración: <strong>{selectedIntegration.name}</strong>
                   </p>
+                  
+                  {/* Selector de Partida Activa */}
+                  {partidas.length > 0 && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-blue-800 mb-1">
+                        Partida Actual para Pesar:
+                      </label>
+                      <select
+                        value={selectedPartidaForWeighing?.id || partidas[0]?.id || ''}
+                        onChange={(e) => {
+                          const partida = partidas.find(p => p.id === e.target.value)
+                          if (partida) {
+                            setSelectedPartidaForWeighing(partida)
+                            showInfo(`Partida ${partida.numeroIngreso} seleccionada`)
+                          }
+                        }}
+                        className="w-full max-w-xs px-3 py-2 bg-white border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-semibold text-gray-900"
+                      >
+                        {partidas.map((partida) => (
+                          <option key={partida.id} value={partida.id}>
+                            Partida {partida.numeroIngreso} - {partida.pesoEsperado.toFixed(2)} qq 
+                            ({partida.isCompleted ? 'Completada' : `${(partida.pesoTotalRegistrado / 100).toFixed(2)} qq registrados`})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-blue-600 mt-1">
+                        Los pesajes que agregues se registrarán en esta partida
+                      </p>
+                    </div>
+                  )}
               </div>
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={generateShipmentReport}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium shadow-md"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Generar Reporte PDF
+                  </button>
                   <button
                     onClick={handleFinishWeighing}
-                    className="btn btn-success btn-sm"
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium shadow-md"
                   >
-                    <CheckIcon className="h-4 w-4 mr-1" />
+                    <CheckIcon className="h-4 w-4" />
                     Finalizar Pesaje
                   </button>
                   <button
                     onClick={handleCancelWeighing}
-                    className="btn btn-danger btn-sm"
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 font-medium shadow-md"
                   >
-                    <XMarkIcon className="h-4 w-4 mr-1" />
+                    <XMarkIcon className="h-4 w-4" />
                     Cancelar Pesaje
                   </button>
             </div>
@@ -2226,17 +2639,17 @@ export default function ShippingWeights() {
                 <div className="mt-2">
                   <button
                     onClick={() => {
-                      // Función simplificada para agregar pesaje directo
-                      const firstPartida = partidas[0]
-                      if (firstPartida) {
-                        handleSelectPartida(firstPartida)
+                      // Usar la partida seleccionada del dropdown o la primera si no hay ninguna seleccionada
+                      const partidaToUse = selectedPartidaForWeighing || partidas[0]
+                      if (partidaToUse) {
+                        handleSelectPartida(partidaToUse)
                       }
                     }}
-                    className="btn btn-primary btn-sm"
+                    className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-semibold shadow-lg mx-auto"
                     disabled={partidas.length === 0}
                   >
-                    <PlusIcon className="h-4 w-4 mr-1" />
-                    Agregar Pesaje
+                    <PlusIcon className="h-5 w-5" />
+                    Agregar Pesaje a Partida {selectedPartidaForWeighing?.numeroIngreso || partidas[0]?.numeroIngreso || ''}
                   </button>
             </div>
             </div>
@@ -3173,7 +3586,7 @@ export default function ShippingWeights() {
                           onChange={(e) => handlePesajeFormChange('taraType', e.target.value)}
                           className="mr-1"
                         />
-                        <span className="text-xs text-gray-700">Yute (1.5 lbs)</span>
+                        <span className="text-xs text-gray-700">Yute (0.015 qq/bulto)</span>
                       </label>
                       <label className="flex items-center">
                         <input
@@ -3184,7 +3597,7 @@ export default function ShippingWeights() {
                           onChange={(e) => handlePesajeFormChange('taraType', e.target.value)}
                           className="mr-1"
                         />
-                        <span className="text-xs text-gray-700">Nylon (1.0 lbs)</span>
+                        <span className="text-xs text-gray-700">Nylon (0.010 qq/bulto)</span>
                       </label>
                   </div>
                   </div>
@@ -3231,40 +3644,32 @@ export default function ShippingWeights() {
                       <div className="space-y-1 text-xs text-green-700">
                         <div className="flex justify-between">
                           <span>Peso Bruto:</span>
-                          <span>{pesajeForm.grossWeight} qq</span>
+                          <span className="font-semibold">{pesajeForm.grossWeight} qq</span>
                 </div>
                         <div className="flex justify-between">
                           <span>Tara por Bulto:</span>
-                          <span>{pesajeForm.taraType === 'yute' ? '1.5' : '1.0'} lbs</span>
+                          <span>{pesajeForm.taraType === 'yute' ? '0.015' : '0.010'} qq</span>
+                      </div>
+                        <div className="flex justify-between">
+                          <span>Bultos:</span>
+                          <span>{pesajeForm.bags}</span>
                       </div>
                         <div className="flex justify-between">
                           <span>Total Tara:</span>
                           <span>
-                            {(pesajeForm.taraType === 'yute' ? 1.5 : 1.0) * parseInt(pesajeForm.bags || '0')} lbs
+                            {((pesajeForm.taraType === 'yute' ? 0.015 : 0.010) * parseInt(pesajeForm.bags || '0')).toFixed(3)} qq
                           </span>
                       </div>
-                        <div className="flex justify-between font-semibold border-t border-green-300 pt-1">
+                        <div className="flex justify-between font-semibold border-t border-green-300 pt-2 mt-2">
                           <span>Peso Neto:</span>
-                          <span>
-                            {calculateNetWeight(
-                              parseFloat(pesajeForm.grossWeight || '0') * 100, // Convertir quintales a libras
-                              parseInt(pesajeForm.bags || '0'),
-                              pesajeForm.taraType
-                            ).toFixed(2)} lbs
+                          <span className="text-base text-green-900">
+                            {(parseFloat(pesajeForm.grossWeight || '0') - 
+                              ((pesajeForm.taraType === 'yute' ? 0.015 : 0.010) * parseInt(pesajeForm.bags || '0'))
+                            ).toFixed(2)} qq
                           </span>
                     </div>
-                        <div className="flex justify-between text-xs text-green-600">
-                          <span>En Quintales:</span>
-                          <span>
-                            {(calculateNetWeight(
-                              parseFloat(pesajeForm.grossWeight || '0') * 100,
-                              parseInt(pesajeForm.bags || '0'),
-                              pesajeForm.taraType
-                            ) / 100).toFixed(2)} qq
-                          </span>
                       </div>
                     </div>
-                      </div>
                   )}
 
                   {/* Notas */}
@@ -3306,15 +3711,19 @@ export default function ShippingWeights() {
 
       {/* Modal de Agregar Pesaje Mejorado */}
       {showWeighingModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto py-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 my-4">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-semibold text-gray-900">Agregar Pesaje</h3>
+                <h3 className="text-xl font-semibold text-gray-900">
+                  {editingWeighing ? 'Editar Pesaje' : 'Agregar Pesaje'}
+                </h3>
                 <button
                   onClick={() => {
                     setShowWeighingModal(false)
                     setSelectedPartidaForWeighing(null)
+                    setEditingWeighing(null)
+                    setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1', tipoTara: 'yute' })
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -3377,19 +3786,36 @@ export default function ShippingWeights() {
                   </div>
                 )}
 
+                {/* Selector de Tipo de Tara */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Peso Bruto (lbs)
+                    Tipo de Tara
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={weighingForm.pesoBruto}
-                    onChange={(e) => setWeighingForm({...weighingForm, pesoBruto: e.target.value})}
+                  <select
+                    value={weighingForm.tipoTara || 'yute'}
+                    onChange={(e) => {
+                      const tipoTara = e.target.value as 'yute' | 'nylon' | 'manual'
+                      const bultos = parseInt(weighingForm.bultos || '0')
+                      let taraCalculada = '0'
+                      
+                      if (tipoTara === 'yute' && bultos > 0) {
+                        taraCalculada = (bultos * 0.015).toFixed(3) // 0.015 qq por bulto de yute
+                      } else if (tipoTara === 'nylon' && bultos > 0) {
+                        taraCalculada = (bultos * 0.010).toFixed(3) // 0.010 qq por bulto de nylon
+                      }
+                      
+                      setWeighingForm({
+                        ...weighingForm, 
+                        tipoTara,
+                        tara: tipoTara === 'manual' ? weighingForm.tara : taraCalculada
+                      })
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="0.00"
-                    required
-                  />
+                  >
+                    <option value="yute">Yute (0.015 qq/bulto)</option>
+                    <option value="nylon">Nylon (0.010 qq/bulto)</option>
+                    <option value="manual">Manual</option>
+                  </select>
                 </div>
 
                 <div>
@@ -3399,7 +3825,23 @@ export default function ShippingWeights() {
                   <input
                     type="number"
                     value={weighingForm.bultos}
-                    onChange={(e) => setWeighingForm({...weighingForm, bultos: e.target.value})}
+                    onChange={(e) => {
+                      const bultos = parseInt(e.target.value || '0')
+                      const tipoTara = weighingForm.tipoTara || 'yute'
+                      let taraCalculada = weighingForm.tara
+                      
+                      if (tipoTara === 'yute' && bultos > 0) {
+                        taraCalculada = (bultos * 0.015).toFixed(3) // 0.015 qq por bulto
+                      } else if (tipoTara === 'nylon' && bultos > 0) {
+                        taraCalculada = (bultos * 0.010).toFixed(3) // 0.010 qq por bulto
+                      }
+                      
+                      setWeighingForm({
+                        ...weighingForm, 
+                        bultos: e.target.value,
+                        tara: tipoTara === 'manual' ? weighingForm.tara : taraCalculada
+                      })
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0"
                     required
@@ -3408,17 +3850,41 @@ export default function ShippingWeights() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tara Total (lbs)
+                    Peso Bruto (qq)
                   </label>
                   <input
                     type="number"
                     step="0.01"
-                    value={weighingForm.tara}
-                    onChange={(e) => setWeighingForm({...weighingForm, tara: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={weighingForm.pesoBruto}
+                    onChange={(e) => setWeighingForm({...weighingForm, pesoBruto: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold"
                     placeholder="0.00"
                     required
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Ingresa el peso en quintales (qq)
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tara Total (qq) {weighingForm.tipoTara !== 'manual' && '(Calculada automáticamente)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={weighingForm.tara}
+                    onChange={(e) => setWeighingForm({...weighingForm, tara: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                    placeholder="0.000"
+                    required
+                    disabled={weighingForm.tipoTara !== 'manual'}
+                  />
+                  {weighingForm.tipoTara !== 'manual' && weighingForm.bultos && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {parseInt(weighingForm.bultos || '0')} bultos × {weighingForm.tipoTara === 'yute' ? '0.015' : '0.010'} qq = {weighingForm.tara} qq
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -3451,33 +3917,38 @@ export default function ShippingWeights() {
 
                 {/* Cálculo automático del peso neto */}
                 {weighingForm.pesoBruto && weighingForm.tara && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                     <div className="flex justify-between items-center">
                       <span className="text-sm font-medium text-green-800">Peso Neto Calculado:</span>
-                      <span className="text-lg font-bold text-green-900">
-                        {(parseFloat(weighingForm.pesoBruto || '0') - parseFloat(weighingForm.tara || '0')).toFixed(2)} lbs
+                      <span className="text-2xl font-bold text-green-900">
+                        {(parseFloat(weighingForm.pesoBruto || '0') - parseFloat(weighingForm.tara || '0')).toFixed(2)} qq
                       </span>
                     </div>
+                    <p className="text-xs text-green-700 mt-2 text-right">
+                      {weighingForm.pesoBruto} qq - {weighingForm.tara} qq = {(parseFloat(weighingForm.pesoBruto || '0') - parseFloat(weighingForm.tara || '0')).toFixed(2)} qq
+                    </p>
                   </div>
                 )}
 
-                <div className="flex justify-end gap-4 pt-4">
+                <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-gray-200 mt-6">
                   <button
                     type="button"
                     onClick={() => {
                       setShowWeighingModal(false)
                       setSelectedPartidaForWeighing(null)
+                      setEditingWeighing(null)
+                      setWeighingForm({ pesoBruto: '', tara: '', bultos: '', observaciones: '', operador: 'Operador 1', tipoTara: 'yute' })
                     }}
-                    className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                    className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+                    className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2 font-semibold text-lg shadow-lg"
                   >
-                    <PlusIcon className="h-4 w-4" />
-                    Agregar Pesaje
+                    <PlusIcon className="h-5 w-5" />
+                    {editingWeighing ? 'Actualizar Pesaje' : 'Registrar Pesaje'}
                   </button>
                 </div>
               </form>

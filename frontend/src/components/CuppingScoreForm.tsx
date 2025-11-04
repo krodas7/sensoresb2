@@ -1,385 +1,357 @@
-import React, { useState, useEffect } from 'react'
-import { 
-  BeakerIcon, 
-  StarIcon, 
-  CheckCircleIcon,
-  XCircleIcon,
-  PlusIcon,
-  TrashIcon
-} from '@heroicons/react/24/outline'
+import React, { useState } from 'react'
+import { XMarkIcon, SparklesIcon } from '@heroicons/react/24/outline'
 
 interface CuppingScoreFormProps {
-  sample: {
-    id: number
-    blindCode: string
-    origin: string
-    variety: string
-    process: string
-  }
-  cupper: {
-    id: number
-    name: string
-    role: string
-  }
-  protocol: 'sca' | 'cva' | 'coe' | 'custom'
-  onSave: (score: CuppingScore) => void
-  initialScore?: CuppingScore
+  sampleId: number
+  sampleName: string
+  cupper: string
+  onSubmit: (score: CuppingScoreData) => void
+  onCancel: () => void
 }
 
-interface CuppingScore {
-  id?: number
+export interface CuppingScoreData {
   sample: number
-  cupper: number
-  // SCA attributes
-  fragrance?: number
-  aroma?: number
-  flavor?: number
-  aftertaste?: number
-  acidity?: number
-  body?: number
-  uniformity?: number
-  cleanCup?: number
-  sweetness?: number
-  balance?: number
-  overall?: number
-  // CVA fields
-  descriptiveScores?: { [key: string]: number }
-  affectiveScores?: { [key: string]: number }
-  // Additional
-  defects?: string
-  notes?: string
-  descriptors?: CuppingDescriptor[]
+  // SCA Attributes (scale 6.00 - 10.00, increments of 0.25)
+  fragrance: number
+  flavor: number
+  aftertaste: number
+  acidity: number
+  body: number
+  uniformity: number
+  balance: number
+  clean_cup: number
+  sweetness: number
+  overall: number
+  // Defects
+  defects: number
+  // Notes
+  notes: string
+  descriptive_scores: string
 }
 
-interface CuppingDescriptor {
-  id?: number
-  descriptor: string
-  intensity: number
-  polarity: 'positive' | 'negative'
-}
-
-const SCA_ATTRIBUTES = [
-  { key: 'fragrance', label: 'Fragancia', description: 'Aroma del café molido' },
-  { key: 'aroma', label: 'Aroma', description: 'Aroma del café preparado' },
-  { key: 'flavor', label: 'Sabor', description: 'Sabor principal del café' },
-  { key: 'aftertaste', label: 'Retrogusto', description: 'Sabor residual después de tragar' },
-  { key: 'acidity', label: 'Acidez', description: 'Brillo y vivacidad' },
-  { key: 'body', label: 'Cuerpo', description: 'Peso y textura en boca' },
-  { key: 'uniformity', label: 'Uniformidad', description: 'Consistencia entre tazas' },
-  { key: 'cleanCup', label: 'Taza Limpia', description: 'Ausencia de defectos' },
-  { key: 'sweetness', description: 'Dulzura natural' },
-  { key: 'balance', label: 'Balance', description: 'Armonía entre atributos' },
-  { key: 'overall', label: 'General', description: 'Evaluación general' }
-]
-
-const FLAVOR_DESCRIPTORS = [
-  // Enzymatic
-  { category: 'Floral', descriptors: ['Black Tea', 'Chamomile', 'Elderflower', 'Hibiscus', 'Jasmine', 'Lavender', 'Rose Hips', 'Rose Water'] },
-  { category: 'Fruity', descriptors: ['Apple', 'Blackberry', 'Black Currant', 'Blueberry', 'Coconut', 'Cherry', 'Cranberry', 'Grape', 'Grapefruit', 'Lemon', 'Lime', 'Mango', 'Melon', 'Orange', 'Papaya', 'Passion Fruit', 'Peach', 'Pear', 'Pineapple', 'Plum', 'Pomegranate', 'Raisin', 'Raspberry', 'Strawberry', 'Tangerine', 'Tomato'] },
-  { category: 'Herbal', descriptors: ['Anise', 'Basil', 'Bay Leaves', 'Cilantro', 'Dill', 'Eucalyptus', 'Grass', 'Mint', 'Oregano', 'Parsley', 'Rosemary', 'Sage', 'Thyme'] },
-  // Sugar Browning
-  { category: 'Caramel', descriptors: ['Butterscotch', 'Caramel', 'Honey', 'Maple Syrup', 'Molasses'] },
-  { category: 'Brown Sugar', descriptors: ['Brown Sugar', 'Cane Sugar', 'Demerara Sugar', 'Jaggery', 'Muscovado'] },
-  { category: 'Chocolate', descriptors: ['Cacao', 'Chocolate', 'Dark Chocolate', 'Milk Chocolate'] },
-  // Dry Distillation
-  { category: 'Roasted', descriptors: ['Ashy', 'Burnt', 'Smoky', 'Charred'] },
-  { category: 'Spices', descriptors: ['Allspice', 'Anise', 'Black Pepper', 'Cardamom', 'Cinnamon', 'Clove', 'Nutmeg', 'Star Anise'] },
-  { category: 'Nutty/Cocoa', descriptors: ['Almond', 'Chestnut', 'Hazelnut', 'Peanut', 'Pecan', 'Walnut'] },
-  { category: 'Cereal', descriptors: ['Barley', 'Malt', 'Oats', 'Rye', 'Wheat'] },
-  // Aromatic Taints
-  { category: 'Chemical', descriptors: ['Chemical', 'Medicinal', 'Petroleum', 'Skunky'] },
-  { category: 'Musty/Earthy', descriptors: ['Dirt', 'Dusty', 'Earthy', 'Moldy', 'Musty', 'Mushroom'] },
-  { category: 'Papery/Musty', descriptors: ['Cardboard', 'Papery', 'Stale', 'Woody'] },
-  { category: 'Fermented', descriptors: ['Fermented', 'Overripe', 'Sour', 'Vinegar'] }
-]
-
-export default function CuppingScoreForm({ sample, cupper, protocol, onSave, initialScore }: CuppingScoreFormProps) {
-  const [score, setScore] = useState<CuppingScore>({
-    sample: sample.id,
-    cupper: cupper.id,
-    descriptors: [],
-    ...initialScore
+export default function CuppingScoreForm({ sampleId, sampleName, cupper, onSubmit, onCancel }: CuppingScoreFormProps) {
+  const [scores, setScores] = useState<CuppingScoreData>({
+    sample: sampleId,
+    fragrance: 6.0,
+    flavor: 6.0,
+    aftertaste: 6.0,
+    acidity: 6.0,
+    body: 6.0,
+    uniformity: 10.0,
+    balance: 6.0,
+    clean_cup: 10.0,
+    sweetness: 10.0,
+    overall: 6.0,
+    defects: 0,
+    notes: '',
+    descriptive_scores: ''
   })
-  
-  const [activeTab, setActiveTab] = useState<'scores' | 'descriptors' | 'notes'>('scores')
-  const [isSaving, setIsSaving] = useState(false)
 
-  useEffect(() => {
-    if (initialScore) {
-      setScore(initialScore)
-    }
-  }, [initialScore])
+  const [showFlavorWheel, setShowFlavorWheel] = useState(false)
+  const [selectedDescriptors, setSelectedDescriptors] = useState<string[]>([])
 
-  const handleAttributeChange = (attribute: string, value: number) => {
-    setScore(prev => ({
-      ...prev,
-      [attribute]: value
-    }))
+  // Descriptores comunes organizados por categoría
+  const descriptorCategories = {
+    'Frutal': ['Cítrico', 'Frutas Rojas', 'Frutas Negras', 'Tropical', 'Manzana', 'Pera', 'Uva'],
+    'Dulce': ['Chocolate', 'Caramelo', 'Miel', 'Vainilla', 'Azúcar Morena', 'Melaza'],
+    'Nuez/Cacao': ['Almendra', 'Avellana', 'Nuez', 'Maní', 'Cacao'],
+    'Floral': ['Jazmín', 'Rosa', 'Lavanda', 'Té Negro', 'Manzanilla'],
+    'Especias': ['Canela', 'Clavo', 'Nuez Moscada', 'Pimienta', 'Anís'],
+    'Herbal': ['Hierba', 'Menta', 'Eucalipto', 'Té Verde']
   }
 
-  const handleDescriptorAdd = (descriptor: string, polarity: 'positive' | 'negative') => {
-    const newDescriptor: CuppingDescriptor = {
-      descriptor,
-      intensity: 5,
-      polarity
-    }
-    
-    setScore(prev => ({
-      ...prev,
-      descriptors: [...(prev.descriptors || []), newDescriptor]
-    }))
-  }
-
-  const handleDescriptorRemove = (index: number) => {
-    setScore(prev => ({
-      ...prev,
-      descriptors: prev.descriptors?.filter((_, i) => i !== index) || []
-    }))
-  }
-
-  const handleDescriptorUpdate = (index: number, field: keyof CuppingDescriptor, value: any) => {
-    setScore(prev => ({
-      ...prev,
-      descriptors: prev.descriptors?.map((desc, i) => 
-        i === index ? { ...desc, [field]: value } : desc
-      ) || []
-    }))
-  }
-
-  const calculateTotalScore = () => {
-    if (protocol === 'sca') {
-      const scaAttributes = [
-        score.fragrance, score.aroma, score.flavor, score.aftertaste,
-        score.acidity, score.body, score.uniformity, score.cleanCup,
-        score.sweetness, score.balance, score.overall
-      ]
-      const validScores = scaAttributes.filter(s => s !== undefined && s !== null)
-      return validScores.reduce((sum, s) => sum + s, 0)
-    }
-    return 0
-  }
-
-  const handleSave = async () => {
-    setIsSaving(true)
-    try {
-      await onSave({
-        ...score,
-        totalScore: calculateTotalScore()
-      })
-    } finally {
-      setIsSaving(false)
+  const toggleDescriptor = (descriptor: string) => {
+    if (selectedDescriptors.includes(descriptor)) {
+      setSelectedDescriptors(selectedDescriptors.filter(d => d !== descriptor))
+    } else {
+      setSelectedDescriptors([...selectedDescriptors, descriptor])
     }
   }
 
-  const getScoreColor = (value: number) => {
-    if (value >= 8) return 'text-green-600 bg-green-100'
-    if (value >= 6) return 'text-yellow-600 bg-yellow-100'
-    if (value >= 4) return 'text-orange-600 bg-orange-100'
-    return 'text-red-600 bg-red-100'
+  // Actualizar descriptive_scores cuando cambian los descriptores
+  React.useEffect(() => {
+    setScores({ ...scores, descriptive_scores: selectedDescriptors.join(', ') })
+  }, [selectedDescriptors])
+
+  const handleSliderChange = (attribute: keyof CuppingScoreData, value: number) => {
+    setScores({ ...scores, [attribute]: value })
   }
+
+  const calculateTotal = () => {
+    const total = scores.fragrance + scores.flavor + scores.aftertaste + 
+                  scores.acidity + scores.body + scores.uniformity + 
+                  scores.balance + scores.clean_cup + scores.sweetness + 
+                  scores.overall - scores.defects
+    return total.toFixed(2)
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    onSubmit(scores)
+  }
+
+  const ScoreSlider = ({ 
+    label, 
+    value, 
+    onChange, 
+    min = 6.0, 
+    max = 10.0 
+  }: { 
+    label: string
+    value: number
+    onChange: (value: number) => void
+    min?: number
+    max?: number
+  }) => (
+    <div className="space-y-2">
+      <div className="flex justify-between items-center">
+        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <span className="text-lg font-bold text-amber-600">{value.toFixed(2)}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.25}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
+      />
+      <div className="flex justify-between text-xs text-gray-500">
+        <span>{min}</span>
+        <span>{max}</span>
+      </div>
+    </div>
+  )
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-amber-600 to-orange-600 p-6 text-white flex justify-between items-center rounded-t-xl flex-shrink-0">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              Evaluación - Muestra {sample.blindCode}
-            </h2>
-            <p className="text-gray-600">
-              {sample.origin} • {sample.variety} • {sample.process}
-            </p>
-            <p className="text-sm text-gray-500">
-              Catador: {cupper.name} ({cupper.role})
-            </p>
+            <h2 className="text-xl font-bold">Formulario de Catación SCA</h2>
+            <p className="text-amber-100 text-sm mt-1">Muestra: {sampleName} | Catador: {cupper}</p>
           </div>
-          <div className="text-right">
-            <div className="text-3xl font-bold text-emerald-600">
-              {calculateTotalScore().toFixed(1)}
-            </div>
-            <div className="text-sm text-gray-500">Puntaje Total</div>
-          </div>
+          <button onClick={onCancel} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+            <XMarkIcon className="h-6 w-6" />
+          </button>
         </div>
-      </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <nav className="-mb-px flex space-x-8">
-          {[
-            { id: 'scores', name: 'Puntajes', icon: StarIcon },
-            { id: 'descriptors', name: 'Descriptores', icon: BeakerIcon },
-            { id: 'notes', name: 'Notas', icon: CheckCircleIcon }
-          ].map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`${
-                activeTab === tab.id
-                  ? 'border-emerald-500 text-emerald-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
-            >
-              <tab.icon className="h-4 w-4 mr-2" />
-              {tab.name}
-            </button>
-          ))}
-        </nav>
-      </div>
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Puntaje Total */}
+          <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-200 rounded-xl p-4 text-center">
+            <p className="text-sm font-medium text-gray-600 mb-1">Puntaje Total</p>
+            <p className="text-4xl font-bold text-amber-600">{calculateTotal()}</p>
+            <p className="text-xs text-gray-500 mt-1">puntos SCA</p>
+          </div>
 
-      {/* Scores Tab */}
-      {activeTab === 'scores' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {SCA_ATTRIBUTES.map((attr) => (
-              <div key={attr.key} className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  {attr.label}
-                </label>
-                <p className="text-xs text-gray-500">{attr.description}</p>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="range"
-                    min="0"
-                    max="10"
-                    step="0.25"
-                    value={score[attr.key as keyof CuppingScore] || 0}
-                    onChange={(e) => handleAttributeChange(attr.key, parseFloat(e.target.value))}
-                    className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className={`w-16 px-2 py-1 rounded text-center text-sm font-bold ${getScoreColor(score[attr.key as keyof CuppingScore] || 0)}`}>
-                    {(score[attr.key as keyof CuppingScore] || 0).toFixed(1)}
-                  </div>
-                </div>
+          {/* Atributos Sensoriales */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Columna 1 */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Atributos Aromáticos</h3>
+              
+              <ScoreSlider
+                label="Fragancia / Aroma"
+                value={scores.fragrance}
+                onChange={(val) => handleSliderChange('fragrance', val)}
+              />
+
+              <ScoreSlider
+                label="Sabor (Flavor)"
+                value={scores.flavor}
+                onChange={(val) => handleSliderChange('flavor', val)}
+              />
+
+              <ScoreSlider
+                label="Postgusto (Aftertaste)"
+                value={scores.aftertaste}
+                onChange={(val) => handleSliderChange('aftertaste', val)}
+              />
+
+              <ScoreSlider
+                label="Acidez (Acidity)"
+                value={scores.acidity}
+                onChange={(val) => handleSliderChange('acidity', val)}
+              />
+
+              <ScoreSlider
+                label="Cuerpo (Body)"
+                value={scores.body}
+                onChange={(val) => handleSliderChange('body', val)}
+              />
+            </div>
+
+            {/* Columna 2 */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Atributos de Calidad</h3>
+              
+              <ScoreSlider
+                label="Uniformidad (Uniformity)"
+                value={scores.uniformity}
+                onChange={(val) => handleSliderChange('uniformity', val)}
+              />
+
+              <ScoreSlider
+                label="Balance"
+                value={scores.balance}
+                onChange={(val) => handleSliderChange('balance', val)}
+              />
+
+              <ScoreSlider
+                label="Taza Limpia (Clean Cup)"
+                value={scores.clean_cup}
+                onChange={(val) => handleSliderChange('clean_cup', val)}
+              />
+
+              <ScoreSlider
+                label="Dulzor (Sweetness)"
+                value={scores.sweetness}
+                onChange={(val) => handleSliderChange('sweetness', val)}
+              />
+
+              <ScoreSlider
+                label="Puntaje General (Overall)"
+                value={scores.overall}
+                onChange={(val) => handleSliderChange('overall', val)}
+              />
+            </div>
+          </div>
+
+          {/* Defectos */}
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-3">Defectos</h3>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <label className="text-sm font-medium text-gray-700">Puntos de Defecto</label>
+                <span className="text-lg font-bold text-red-600">{scores.defects.toFixed(2)}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Descriptors Tab */}
-      {activeTab === 'descriptors' && (
-        <div className="space-y-6">
-          {/* Add Descriptors */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Agregar Descriptores</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {FLAVOR_DESCRIPTORS.map((category) => (
-                <div key={category.category} className="space-y-2">
-                  <h4 className="font-medium text-gray-700">{category.category}</h4>
-                  <div className="space-y-1">
-                    {category.descriptors.map((descriptor) => (
-                      <button
-                        key={descriptor}
-                        onClick={() => handleDescriptorAdd(descriptor, 'positive')}
-                        className="w-full text-left px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded"
-                      >
-                        + {descriptor}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+              <input
+                type="range"
+                min={0}
+                max={20}
+                step={0.25}
+                value={scores.defects}
+                onChange={(e) => handleSliderChange('defects', parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-red-600"
+              />
+              <p className="text-xs text-gray-500">Los defectos se restan del puntaje total</p>
             </div>
           </div>
 
-          {/* Current Descriptors */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-900">Descriptores Actuales</h3>
-            {score.descriptors?.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">No hay descriptores agregados</p>
-            ) : (
-              <div className="space-y-2">
-                {score.descriptors?.map((descriptor, index) => (
-                  <div key={index} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${
-                          descriptor.polarity === 'positive' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {descriptor.polarity === 'positive' ? '+' : '-'}
-                        </span>
-                        <span className="font-medium">{descriptor.descriptor}</span>
-                      </div>
+          {/* Descriptores */}
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <SparklesIcon className="h-5 w-5 text-purple-600" />
+                Descriptores de Sabor
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowFlavorWheel(!showFlavorWheel)}
+                className="text-sm text-purple-600 hover:text-purple-700 font-medium"
+              >
+                {showFlavorWheel ? 'Ocultar' : 'Mostrar'} Selector
+              </button>
+            </div>
+
+            {/* Descriptores Seleccionados */}
+            {selectedDescriptors.length > 0 && (
+              <div className="mb-3 flex flex-wrap gap-2">
+                {selectedDescriptors.map(desc => (
+                  <span 
+                    key={desc}
+                    onClick={() => toggleDescriptor(desc)}
+                    className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-medium cursor-pointer hover:bg-purple-200 transition-colors flex items-center gap-1"
+                  >
+                    {desc}
+                    <XMarkIcon className="h-3 w-3" />
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Selector de Descriptores */}
+            {showFlavorWheel && (
+              <div className="space-y-3">
+                {Object.entries(descriptorCategories).map(([category, descriptors]) => (
+                  <div key={category}>
+                    <h4 className="text-xs font-semibold text-gray-600 mb-2">{category}</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {descriptors.map(desc => {
+                        const isSelected = selectedDescriptors.includes(desc)
+                        return (
+                          <button
+                            key={desc}
+                            type="button"
+                            onClick={() => toggleDescriptor(desc)}
+                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                              isSelected
+                                ? 'bg-purple-600 text-white shadow-md'
+                                : 'bg-white text-gray-700 border border-gray-300 hover:border-purple-400 hover:bg-purple-50'
+                            }`}
+                          >
+                            {desc}
+                          </button>
+                        )
+                      })}
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="range"
-                        min="1"
-                        max="10"
-                        value={descriptor.intensity}
-                        onChange={(e) => handleDescriptorUpdate(index, 'intensity', parseInt(e.target.value))}
-                        className="w-20 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                      />
-                      <span className="w-8 text-center text-sm font-medium">
-                        {descriptor.intensity}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleDescriptorRemove(index)}
-                      className="text-red-600 hover:text-red-800 p-1"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
                   </div>
                 ))}
               </div>
             )}
-          </div>
-        </div>
-      )}
 
-      {/* Notes Tab */}
-      {activeTab === 'notes' && (
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Defectos
-            </label>
-            <textarea
-              value={score.defects || ''}
-              onChange={(e) => setScore(prev => ({ ...prev, defects: e.target.value }))}
-              placeholder="Describe cualquier defecto encontrado..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              rows={3}
-            />
+            {/* Input Manual */}
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                O escribe descriptores manualmente
+              </label>
+              <input
+                type="text"
+                value={scores.descriptive_scores}
+                onChange={(e) => {
+                  setScores({ ...scores, descriptive_scores: e.target.value })
+                  setSelectedDescriptors(e.target.value.split(',').map(s => s.trim()).filter(Boolean))
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                placeholder="Ej: Chocolate, Caramelo, Cítricos..."
+              />
+            </div>
           </div>
+
+          {/* Notas */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Notas Adicionales
             </label>
             <textarea
-              value={score.notes || ''}
-              onChange={(e) => setScore(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder="Notas adicionales sobre la evaluación..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              rows={4}
+              value={scores.notes}
+              onChange={(e) => setScores({ ...scores, notes: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              rows={3}
+              placeholder="Observaciones, comentarios, impresiones generales..."
             />
           </div>
-        </div>
-      )}
 
-      {/* Save Button */}
-      <div className="flex justify-end pt-6 border-t border-gray-200">
-        <button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="btn btn-primary flex items-center"
-        >
-          {isSaving ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Guardando...
-            </>
-          ) : (
-            <>
-              <CheckCircleIcon className="h-4 w-4 mr-2" />
-              Guardar Evaluación
-            </>
-          )}
-        </button>
+        </form>
+
+        {/* Footer con Botones */}
+        <div className="border-t p-4 flex gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="flex-1 px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 text-white rounded-lg hover:from-amber-700 hover:to-orange-700 font-medium shadow-md hover:shadow-lg transition-all"
+          >
+            Guardar Evaluación
+          </button>
+        </div>
       </div>
     </div>
   )

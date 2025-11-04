@@ -1,59 +1,62 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   CubeIcon, 
   PlusIcon, 
   PencilIcon, 
   TrashIcon,
-  EyeIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
   TagIcon,
   ArchiveBoxIcon,
   ExclamationTriangleIcon,
   CheckCircleIcon,
-  ClockIcon,
-  ChartBarIcon,
-  TruckIcon,
   ArrowUpIcon,
   ArrowDownIcon,
   MinusIcon,
   FunnelIcon
 } from '@heroicons/react/24/outline'
+import api from '../services/api'
+import toast from 'react-hot-toast'
 
 interface Category {
   id: number
   name: string
   description: string
   color: string
-  createdAt: Date
-  productCount: number
+  is_active: boolean
+  product_count: number
+  created_at: string
+  updated_at: string
 }
 
 interface Product {
   id: number
   name: string
   description: string
-  sku: string
-  category: Category
+  category: number
+  category_name?: string
   unit: string
-  currentStock: number
-  minStock: number
-  supplier: string
+  current_stock: number
+  min_stock: number
   location: string
   status: 'active' | 'inactive' | 'discontinued'
-  createdAt: Date
-  lastUpdated: Date
+  is_active: boolean
+  is_low_stock?: boolean
+  created_at: string
+  updated_at: string
 }
 
 interface StockMovement {
   id: number
-  product: Product
-  type: 'in' | 'out' | 'adjustment'
+  product: number
+  product_name?: string
+  movement_type: 'in' | 'out' | 'adjustment'
+  movement_type_display?: string
   quantity: number
-  reason: string
   reference: string
   user: string
-  createdAt: Date
+  notes: string
+  created_at: string
 }
 
 export default function Inventory() {
@@ -62,6 +65,7 @@ export default function Inventory() {
   const [selectedStatus, setSelectedStatus] = useState('')
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
+  const [showCategoryManagerModal, setShowCategoryManagerModal] = useState(false)
   const [showStockMovementModal, setShowStockMovementModal] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
@@ -70,763 +74,727 @@ export default function Inventory() {
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Sample data
-  const initialCategories: Category[] = [
-    {
-      id: 1,
-      name: 'Café Verde',
-      description: 'Café en grano sin procesar',
-      color: 'bg-green-500',
-      createdAt: new Date('2023-01-01'),
-      productCount: 5
-    },
-    {
-      id: 2,
-      name: 'Café Tostado',
-      description: 'Café procesado y tostado',
-      color: 'bg-amber-500',
-      createdAt: new Date('2023-01-01'),
-      productCount: 3
-    },
-    {
-      id: 3,
-      name: 'Insumos',
-      description: 'Materiales y suministros',
-      color: 'bg-blue-500',
-      createdAt: new Date('2023-01-01'),
-      productCount: 8
-    },
-    {
-      id: 4,
-      name: 'Equipos',
-      description: 'Maquinaria y equipos',
-      color: 'bg-purple-500',
-      createdAt: new Date('2023-01-01'),
-      productCount: 2
-    }
-  ]
+  const [productForm, setProductForm] = useState({
+    name: '',
+    description: '',
+    category: 0,
+    unit: 'kg',
+    current_stock: 0,
+    min_stock: 0,
+    location: '',
+    status: 'active' as 'active' | 'inactive' | 'discontinued'
+  })
 
-  const initialProducts: Product[] = [
-    {
-      id: 1,
-      name: 'Café Arábica Premium',
-      description: 'Café arábica de alta calidad',
-      sku: 'CAF-001',
-      category: initialCategories[0],
-      unit: 'kg',
-      currentStock: 150,
-      minStock: 50,
-      supplier: 'Finca El Paraíso',
-      location: 'Almacén A',
-      status: 'active',
-      createdAt: new Date('2023-01-15'),
-      lastUpdated: new Date('2023-12-01')
-    },
-    {
-      id: 2,
-      name: 'Café Robusta',
-      description: 'Café robusta para mezclas',
-      sku: 'CAF-002',
-      category: initialCategories[0],
-      unit: 'kg',
-      currentStock: 80,
-      minStock: 30,
-      supplier: 'Finca La Esperanza',
-      location: 'Almacén A',
-      status: 'active',
-      createdAt: new Date('2023-02-01'),
-      lastUpdated: new Date('2023-12-01')
-    },
-    {
-      id: 3,
-      name: 'Café Tostado Medio',
-      description: 'Café tostado a punto medio',
-      sku: 'CAF-003',
-      category: initialCategories[1],
-      unit: 'kg',
-      currentStock: 25,
-      minStock: 10,
-      supplier: 'Procesamiento Interno',
-      location: 'Almacén B',
-      status: 'active',
-      createdAt: new Date('2023-03-01'),
-      lastUpdated: new Date('2023-12-01')
-    }
-  ]
+  const [categoryForm, setCategoryForm] = useState({
+    name: '',
+    description: '',
+    color: 'bg-blue-500'
+  })
 
-  // Initialize data
-  React.useEffect(() => {
-    setCategories(initialCategories)
-    setProducts(initialProducts)
+  const [movementForm, setMovementForm] = useState({
+    product: 0,
+    movement_type: 'in' as 'in' | 'out' | 'adjustment',
+    quantity: 0,
+    reference: '',
+    user: '',
+    notes: ''
+  })
+
+  useEffect(() => {
+    fetchCategories()
+    fetchProducts()
+    fetchStockMovements()
   }, [])
 
-  // CRUD Functions
-  const handleAddProduct = (newProduct: Omit<Product, 'id' | 'createdAt' | 'lastUpdated'>) => {
-    const id = Math.max(...products.map(p => p.id), 0) + 1
-    const product: Product = {
-      ...newProduct,
-      id,
-      createdAt: new Date(),
-      lastUpdated: new Date()
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/inventory/categories/')
+      const data = response.data.results || response.data || []
+      setCategories(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+      toast.error('Error al cargar categorías')
+      setCategories([])
     }
-    setProducts(prev => [...prev, product])
-    setShowAddProductModal(false)
   }
 
-  const handleEditProduct = (updatedProduct: Product) => {
-    setProducts(prev => prev.map(p => 
-      p.id === updatedProduct.id ? { ...updatedProduct, lastUpdated: new Date() } : p
-    ))
+  const fetchProducts = async () => {
+    try {
+      setLoading(true)
+      const response = await api.get('/inventory/products/')
+      const data = response.data.results || response.data || []
+      setProducts(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('Error fetching products:', error)
+      toast.error('Error al cargar productos')
+      setProducts([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchStockMovements = async () => {
+    try {
+      const response = await api.get('/inventory/movements/')
+      const data = response.data.results || response.data || []
+      setStockMovements(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error('Error fetching stock movements:', error)
+      toast.error('Error al cargar movimientos')
+      setStockMovements([])
+    }
+  }
+
+  const handleCreateProduct = () => {
+    setEditingProduct(null)
+    setProductForm({
+      name: '',
+      description: '',
+      category: categories.length > 0 ? categories[0].id : 0,
+      unit: 'kg',
+      current_stock: 0,
+      min_stock: 0,
+      location: '',
+      status: 'active'
+    })
+    setShowAddProductModal(true)
+  }
+
+  const handleEditProduct = (product: Product) => {
+    setEditingProduct(product)
+    setProductForm({
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      unit: product.unit,
+      current_stock: product.current_stock,
+      min_stock: product.min_stock,
+      location: product.location,
+      status: product.status
+    })
+    setShowAddProductModal(true)
+  }
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      if (editingProduct) {
+        await api.put(`/inventory/products/${editingProduct.id}/`, productForm)
+        toast.success('Artículo actualizado exitosamente')
+      } else {
+        await api.post('/inventory/products/', productForm)
+        toast.success('Artículo creado exitosamente')
+      }
+      fetchProducts()
     setShowAddProductModal(false)
     setEditingProduct(null)
-  }
-
-  const handleDeleteProduct = (id: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este producto?')) {
-      setProducts(prev => prev.filter(p => p.id !== id))
+    } catch (error: any) {
+      console.error('Error guardando artículo:', error)
+      const errorMessage = error.response?.data?.name?.[0] || 'Error al guardar artículo'
+      toast.error(errorMessage)
     }
   }
 
-  const handleAddCategory = (newCategory: Omit<Category, 'id' | 'createdAt' | 'productCount'>) => {
-    const id = Math.max(...categories.map(c => c.id), 0) + 1
-    const category: Category = {
-      ...newCategory,
-      id,
-      createdAt: new Date(),
-      productCount: 0
+  const handleDeleteProduct = async (productId: number) => {
+    if (!confirm('¿Estás seguro de eliminar este artículo?')) return
+    
+    try {
+      await api.delete(`/inventory/products/${productId}/`)
+      toast.success('Artículo eliminado exitosamente')
+      fetchProducts()
+    } catch (error) {
+      console.error('Error deleting product:', error)
+      toast.error('Error al eliminar artículo')
     }
-    setCategories(prev => [...prev, category])
-    setShowAddCategoryModal(false)
+  }
+
+  const handleCreateCategory = () => {
+    setEditingCategory(null)
+    setCategoryForm({
+      name: '',
+      description: '',
+      color: 'bg-blue-500'
+    })
+    setShowAddCategoryModal(true)
   }
 
   const handleEditCategory = (category: Category) => {
     setEditingCategory(category)
+    setCategoryForm({
+      name: category.name,
+      description: category.description,
+      color: category.color
+    })
     setShowAddCategoryModal(true)
   }
 
-  const handleUpdateCategory = (categoryData: Omit<Category, 'id' | 'createdAt' | 'productCount'>) => {
+  const handleSaveCategory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
     if (editingCategory) {
-      setCategories(prev => prev.map(c => 
-        c.id === editingCategory.id 
-          ? { ...c, ...categoryData }
-          : c
-      ))
-      setEditingCategory(null)
+        await api.put(`/inventory/categories/${editingCategory.id}/`, categoryForm)
+        toast.success('Categoría actualizada exitosamente')
+      } else {
+        await api.post('/inventory/categories/', categoryForm)
+        toast.success('Categoría creada exitosamente')
+      }
+      fetchCategories()
+      fetchProducts() // Refresh products to update category counts
       setShowAddCategoryModal(false)
+      setEditingCategory(null)
+    } catch (error: any) {
+      console.error('Error guardando categoría:', error)
+      const errorMessage = error.response?.data?.name?.[0] || 'Error al guardar categoría'
+      toast.error(errorMessage)
     }
   }
 
-  const handleDeleteCategory = (categoryId: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar esta categoría? Esta acción no se puede deshacer.')) {
-      // Verificar si hay productos usando esta categoría
-      const productsUsingCategory = products.filter(p => p.category.id === categoryId)
-      if (productsUsingCategory.length > 0) {
-        alert(`No se puede eliminar la categoría porque ${productsUsingCategory.length} producto(s) la están usando. Primero mueve o elimina esos productos.`)
-        return
-      }
-      
-      setCategories(prev => prev.filter(c => c.id !== categoryId))
+  const handleDeleteCategory = async (categoryId: number) => {
+    if (!confirm('¿Estás seguro de eliminar esta categoría? Esto también eliminará todos sus productos.')) return
+    
+    try {
+      await api.delete(`/inventory/categories/${categoryId}/`)
+      toast.success('Categoría eliminada exitosamente')
+      fetchCategories()
+      fetchProducts()
+    } catch (error) {
+      console.error('Error deleting category:', error)
+      toast.error('Error al eliminar categoría')
     }
   }
 
-  const handleStockMovement = (movement: Omit<StockMovement, 'id' | 'createdAt'>) => {
-    const id = Math.max(...stockMovements.map(m => m.id), 0) + 1
-    const newMovement: StockMovement = {
-      ...movement,
-      id,
-      createdAt: new Date()
+  const handleOpenStockMovement = (product: Product) => {
+    setSelectedProduct(product)
+    setMovementForm({
+      product: product.id,
+      movement_type: 'in',
+      quantity: 0,
+      reference: '',
+      user: '',
+      notes: ''
+    })
+    setShowStockMovementModal(true)
+  }
+
+  const handleSaveStockMovement = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      await api.post('/inventory/movements/', movementForm)
+      toast.success('Movimiento de stock registrado exitosamente')
+      fetchProducts()
+      fetchStockMovements()
+      setShowStockMovementModal(false)
+      setSelectedProduct(null)
+    } catch (error) {
+      console.error('Error guardando movimiento:', error)
+      toast.error('Error al guardar movimiento')
     }
-    
-    // Update product stock
-    setProducts(prev => prev.map(p => {
-      if (p.id === movement.product.id) {
-        const newStock = movement.type === 'in' 
-          ? p.currentStock + movement.quantity
-          : movement.type === 'out'
-          ? p.currentStock - movement.quantity
-          : movement.quantity // adjustment
-        
-        return {
-          ...p,
-          currentStock: Math.max(0, newStock),
-          lastUpdated: new Date()
-        }
-      }
-      return p
-    }))
-    
-    setStockMovements(prev => [...prev, newMovement])
-    setShowStockMovementModal(false)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'active':
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 flex items-center gap-1">
+            <CheckCircleIcon className="h-3 w-3" />
+            Activo
+          </span>
+        )
+      case 'inactive':
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800 flex items-center gap-1">
+            <MinusIcon className="h-3 w-3" />
+            Inactivo
+          </span>
+        )
+      case 'discontinued':
+        return (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 flex items-center gap-1">
+            <XMarkIcon className="h-3 w-3" />
+            Descontinuado
+          </span>
+        )
+      default:
+        return null
+    }
+  }
+
+  const getMovementIcon = (type: string) => {
+    switch (type) {
+      case 'in':
+        return <ArrowDownIcon className="h-4 w-4 text-green-600" />
+      case 'out':
+        return <ArrowUpIcon className="h-4 w-4 text-red-600" />
+      case 'adjustment':
+        return <MinusIcon className="h-4 w-4 text-blue-600" />
+      default:
+        return null
+    }
   }
 
   const filteredProducts = products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         product.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === '' || product.category.id.toString() === selectedCategory
-    const matchesStatus = selectedStatus === '' || product.status === selectedStatus
-    
+    const matchesSearch = 
+      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.description.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory = !selectedCategory || product.category.toString() === selectedCategory
+    const matchesStatus = !selectedStatus || product.status === selectedStatus
     return matchesSearch && matchesCategory && matchesStatus
   })
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800'
-      case 'inactive':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'discontinued':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
+  const totalValue = filteredProducts.reduce((sum, p) => sum + p.current_stock, 0)
+  const lowStockCount = products.filter(p => p.is_low_stock).length
+  const activeProductsCount = products.filter(p => p.status === 'active').length
 
-  const getStockStatus = (current: number, min: number) => {
-    if (current <= 0) return { color: 'text-red-600', icon: ExclamationTriangleIcon, text: 'Sin Stock' }
-    if (current <= min) return { color: 'text-yellow-600', icon: ExclamationTriangleIcon, text: 'Stock Bajo' }
-    return { color: 'text-green-600', icon: CheckCircleIcon, text: 'En Stock' }
+  if (loading) {
+  return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        </div>
+      </div>
+    )
   }
-
-  const lowStockProducts = products.filter(p => p.currentStock <= p.minStock)
-  const outOfStockProducts = products.filter(p => p.currentStock === 0)
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-6">
+        <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Inventario</h1>
-          <p className="text-gray-600 mt-2">Gestión de productos, categorías y control de stock</p>
+              <h1 className="text-2xl font-bold mb-1">Gestión de Inventario</h1>
+              <p className="text-purple-100">Control de productos y stock</p>
         </div>
-        <div className="flex gap-2">
-          {activeTab === 'products' && (
-            <button 
-              onClick={() => setShowAddProductModal(true)}
-              className="btn btn-primary"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              Nuevo Producto
-            </button>
-          )}
-          {activeTab === 'categories' && (
-            <button 
-              onClick={() => setShowAddCategoryModal(true)}
-              className="btn btn-primary"
-            >
-              <TagIcon className="h-5 w-5 mr-2" />
-              Nueva Categoría
-            </button>
-          )}
-          {activeTab === 'movements' && (
-            <button 
-              onClick={() => setShowStockMovementModal(true)}
-              className="btn btn-primary"
-            >
-              <ArrowUpIcon className="h-5 w-5 mr-2" />
-              Movimiento de Stock
-            </button>
-          )}
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
+              <CubeIcon className="h-8 w-8 text-white" />
+        </div>
+      </div>
         </div>
       </div>
 
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-blue-100 rounded-full">
+              <ArchiveBoxIcon className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Total Artículos</p>
+              <p className="text-2xl font-bold text-gray-900">{products.length}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-green-100 rounded-full">
+              <CheckCircleIcon className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Artículos Activos</p>
+              <p className="text-2xl font-bold text-gray-900">{activeProductsCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-red-100 rounded-full">
+              <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Stock Bajo</p>
+              <p className="text-2xl font-bold text-gray-900">{lowStockCount}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-purple-100 rounded-full">
+              <TagIcon className="h-6 w-6 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Categorías</p>
+              <p className="text-2xl font-bold text-gray-900">{categories.length}</p>
+            </div>
+            </div>
+          </div>
+        </div>
+
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          {[
-            { id: 'products', name: 'Productos', icon: CubeIcon },
-            { id: 'categories', name: 'Categorías', icon: TagIcon },
-            { id: 'movements', name: 'Movimientos', icon: ArrowUpIcon }
-          ].map((tab) => (
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {['products', 'categories', 'movements'].map((tab) => (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              key={tab}
+              onClick={() => setActiveTab(tab)}
               className={`
-                ${activeTab === tab.id
-                  ? 'border-emerald-500 text-emerald-600'
+                ${activeTab === tab
+                  ? 'border-purple-500 text-purple-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }
-                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200 flex items-center gap-2
+                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
               `}
             >
-              <tab.icon className="h-4 w-4" />
-              {tab.name}
+              {tab === 'products' && 'Artículos'}
+              {tab === 'categories' && 'Categorías'}
+              {tab === 'movements' && 'Movimientos'}
             </button>
           ))}
         </nav>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <CubeIcon className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Total Productos</p>
-              <p className="text-2xl font-bold text-gray-900">{products.length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-red-100 rounded-lg">
-              <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Stock Bajo</p>
-              <p className="text-2xl font-bold text-gray-900">{lowStockProducts.length}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-yellow-100 rounded-lg">
-              <ArchiveBoxIcon className="h-6 w-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Sin Stock</p>
-              <p className="text-2xl font-bold text-gray-900">{outOfStockProducts.length}</p>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Tab Content */}
+      {/* Products Tab */}
       {activeTab === 'products' && (
         <>
           {/* Filters */}
-          <div className="card">
-            <div className="flex flex-col lg:flex-row gap-4">
+          <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 p-4 mb-6">
+            <div className="flex flex-col lg:flex-row gap-3 items-center">
               <div className="flex-1 relative">
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Buscar productos por nombre, SKU o descripción..."
+                  placeholder="Buscar artículos por nombre..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="input pl-10"
+                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all duration-300 placeholder-gray-500"
                 />
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-2">
                 <select 
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="input w-48"
+                  className="px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
                 >
                   <option value="">Todas las categorías</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id.toString()}>
+                      {cat.name}
                     </option>
                   ))}
                 </select>
                 <select 
                   value={selectedStatus}
                   onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="input w-48"
+                  className="px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
                 >
                   <option value="">Todos los estados</option>
                   <option value="active">Activo</option>
                   <option value="inactive">Inactivo</option>
                   <option value="discontinued">Descontinuado</option>
                 </select>
+                <button
+                  onClick={() => setShowCategoryManagerModal(true)}
+                  className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-2.5 rounded-lg hover:from-amber-700 hover:to-orange-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all font-semibold"
+                >
+                  <TagIcon className="h-5 w-5" />
+                  Categorías
+                </button>
+                <button
+                  onClick={handleCreateProduct}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg hover:from-purple-700 hover:to-indigo-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all font-semibold"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Nuevo Artículo
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Products Table */}
-          <div className="card">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Producto
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Categoría
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Stock
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Estado
-                    </th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredProducts.map((product) => {
-                    const stockStatus = getStockStatus(product.currentStock, product.minStock)
-                    return (
-                      <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-10 w-10">
-                              <div className={`h-10 w-10 rounded-lg ${product.category.color} flex items-center justify-center`}>
-                                <CubeIcon className="h-5 w-5 text-white" />
+          {/* Products Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredProducts.map((product) => (
+              <div key={product.id} className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 hover:shadow-xl transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
+                    <p className="text-sm text-gray-500">{product.category_name}</p>
                               </div>
+                  {product.is_low_stock && (
+                    <ExclamationTriangleIcon className="h-5 w-5 text-red-600" title="Stock bajo" />
+                  )}
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">
-                                {product.name}
+
+                <div className="mb-3">
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-600">Stock Actual</span>
+                    <span className="font-bold text-gray-900">
+                      {product.current_stock} {product.unit}
+                    </span>
                               </div>
-                              <div className="text-sm text-gray-500">
-                                SKU: {product.sku}
-                              </div>
-                              <div className="text-xs text-gray-400">
-                                {product.location}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full text-white ${product.category.color}`}>
-                            {product.category.name}
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Stock Mínimo</span>
+                    <span className="text-gray-500">
+                      {product.min_stock} {product.unit}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <stockStatus.icon className={`h-4 w-4 mr-2 ${stockStatus.color}`} />
-                            <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {product.currentStock} {product.unit}
                               </div>
-                              <div className={`text-xs ${stockStatus.color}`}>
-                                {stockStatus.text}
                               </div>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(product.status)}`}>
-                            {product.status === 'active' ? 'Activo' :
-                             product.status === 'inactive' ? 'Inactivo' : 'Descontinuado'}
+
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {getStatusBadge(product.status)}
+                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    {product.category_name || `Cat ${product.category}`}
                           </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-2">
+                </div>
+
+                <div className="flex gap-2 pt-3 border-t border-gray-200">
                             <button 
-                              onClick={() => setSelectedProduct(product)}
-                              className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors"
-                              title="Ver detalles"
+                    onClick={() => handleOpenStockMovement(product)}
+                    className="flex-1 py-2 px-3 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm font-medium"
                             >
-                              <EyeIcon className="h-4 w-4" />
+                    Movimiento
                             </button>
                             <button 
-                              onClick={() => setEditingProduct(product)}
-                              className="text-emerald-600 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-50 transition-colors"
-                              title="Editar producto"
+                    onClick={() => handleEditProduct(product)}
+                    className="py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
                             >
                               <PencilIcon className="h-4 w-4" />
                             </button>
                             <button 
                               onClick={() => handleDeleteProduct(product.id)}
-                              className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                              title="Eliminar producto"
+                    className="py-2 px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                             >
                               <TrashIcon className="h-4 w-4" />
                             </button>
                           </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+              </div>
+            ))}
+          </div>
 
               {filteredProducts.length === 0 && (
                 <div className="text-center py-12">
-                  <CubeIcon className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron productos</h3>
+              <ArchiveBoxIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay artículos</h3>
                   <p className="mt-1 text-sm text-gray-500">
-                    Intenta ajustar los filtros de búsqueda.
+                {searchTerm || selectedCategory || selectedStatus
+                  ? 'No se encontraron resultados'
+                  : 'Comienza creando un nuevo artículo'}
                   </p>
                 </div>
               )}
-            </div>
-          </div>
         </>
       )}
 
       {/* Categories Tab */}
       {activeTab === 'categories' && (
-        <div className="card">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <>
+          <div className="mb-4 flex justify-end">
+            <button
+              onClick={handleCreateCategory}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-6 py-2.5 rounded-lg hover:from-purple-700 hover:to-indigo-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all font-semibold"
+            >
+              <PlusIcon className="h-5 w-5" />
+              Nueva Categoría
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {categories.map((category) => (
-              <div key={category.id} className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg transition-shadow">
-                <div className="flex items-center mb-4">
-                  <div className={`h-12 w-12 rounded-lg ${category.color} flex items-center justify-center`}>
-                    <TagIcon className="h-6 w-6 text-white" />
+              <div key={category.id} className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 hover:shadow-xl transition-shadow">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 ${category.color} rounded-full flex items-center justify-center`}>
+                      <TagIcon className="h-5 w-5 text-white" />
                   </div>
-                  <div className="ml-4">
-                    <h3 className="text-lg font-semibold text-gray-900">{category.name}</h3>
-                    <p className="text-sm text-gray-500">{category.productCount} productos</p>
+                    <div>
+                      <h3 className="font-semibold text-gray-900">{category.name}</h3>
+                      <p className="text-sm text-gray-500">{category.product_count} productos</p>
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 mb-4">{category.description}</p>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">
-                    Creada: {category.createdAt.toLocaleDateString()}
-                  </span>
-                  <div className="flex space-x-2">
+                </div>
+
+                <p className="text-sm text-gray-600 mb-3">{category.description}</p>
+
+                <div className="flex gap-2">
                     <button 
                       onClick={() => handleEditCategory(category)}
-                      className="text-emerald-600 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-50 transition-colors"
-                      title="Editar categoría"
+                    className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                     >
-                      <PencilIcon className="h-4 w-4" />
+                    Editar
                     </button>
                     <button 
                       onClick={() => handleDeleteCategory(category.id)}
-                      className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                      title="Eliminar categoría"
+                    className="py-2 px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                     >
                       <TrashIcon className="h-4 w-4" />
                     </button>
-                  </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {categories.length === 0 && (
+            <div className="text-center py-12">
+              <TagIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay categorías</h3>
+              <p className="mt-1 text-sm text-gray-500">Comienza creando una nueva categoría</p>
         </div>
+          )}
+        </>
       )}
 
-      {/* Stock Movements Tab */}
+      {/* Movements Tab */}
       {activeTab === 'movements' && (
-        <div className="card">
+        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Producto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Cantidad
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Motivo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Usuario
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Artículo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cantidad</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Referencia</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {stockMovements.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                      <ArrowUpIcon className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                      <p>No hay movimientos de stock</p>
-                      <p className="text-sm">Registra el primer movimiento para comenzar</p>
-                    </td>
-                  </tr>
-                ) : (
-                  stockMovements.map((movement) => (
+              <tbody className="divide-y divide-gray-200">
+                {stockMovements.map((movement) => (
                     <tr key={movement.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {movement.createdAt.toLocaleDateString()}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(movement.created_at).toLocaleDateString('es-GT')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {movement.product.name}
-                        </div>
-                        <div className="text-sm text-gray-500">
-                          SKU: {movement.product.sku}
-                        </div>
+                      <div className="text-sm font-medium text-gray-900">{movement.product_name}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          movement.type === 'in' ? 'bg-green-100 text-green-800' :
-                          movement.type === 'out' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {movement.type === 'in' ? 'Entrada' :
-                           movement.type === 'out' ? 'Salida' : 'Ajuste'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center">
-                          {movement.type === 'in' ? (
-                            <ArrowUpIcon className="h-4 w-4 text-green-600 mr-1" />
-                          ) : movement.type === 'out' ? (
-                            <ArrowDownIcon className="h-4 w-4 text-red-600 mr-1" />
-                          ) : (
-                            <MinusIcon className="h-4 w-4 text-yellow-600 mr-1" />
-                          )}
-                          {movement.quantity} {movement.product.unit}
+                      <div className="flex items-center gap-2">
+                        {getMovementIcon(movement.movement_type)}
+                        <span className="text-sm text-gray-900">{movement.movement_type_display}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {movement.reason}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {movement.quantity}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {movement.user}
-                      </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{movement.reference || 'N/A'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{movement.user || 'N/A'}</td>
                     </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
+
+          {stockMovements.length === 0 && (
+            <div className="text-center py-12">
+              <MinusIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay movimientos</h3>
+              <p className="mt-1 text-sm text-gray-500">Los movimientos de stock aparecerán aquí</p>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Add Product Modal */}
+      {/* Modal Artículo */}
       {showAddProductModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {editingProduct ? 'Editar Producto' : 'Nuevo Producto'}
-                </h3>
-                <button 
-                  onClick={() => {
-                    setShowAddProductModal(false)
-                    setEditingProduct(null)
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-bold">
+                {editingProduct ? 'Editar Artículo' : 'Nuevo Artículo'}
+              </h2>
+              <button onClick={() => setShowAddProductModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  const formData = new FormData(e.target as HTMLFormElement)
-                  const category = categories.find(c => c.id === Number(formData.get('categoryId')))
-                  
-                  if (category) {
-                    const productData = {
-                      name: formData.get('name') as string,
-                      description: formData.get('description') as string,
-                      sku: formData.get('sku') as string,
-                      category,
-                      unit: formData.get('unit') as string,
-                      currentStock: Number(formData.get('currentStock')),
-                      minStock: Number(formData.get('minStock')),
-                      supplier: formData.get('supplier') as string,
-                      location: formData.get('location') as string,
-                      status: formData.get('status') as Product['status']
-                    }
-                    
-                    if (editingProduct) {
-                      handleEditProduct({ ...editingProduct, ...productData })
-                    } else {
-                      handleAddProduct(productData)
-                    }
-                  }
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="label">Nombre del Producto</label>
+            <form onSubmit={handleSaveProduct} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
                     <input 
                       type="text" 
-                      name="name"
-                      defaultValue={editingProduct?.name || ''}
-                      className="input" 
                       required 
+                    value={productForm.name}
+                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+                  </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                  <textarea
+                    value={productForm.description}
+                    onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    rows={3}
                     />
                   </div>
                   <div>
-                    <label className="label">SKU</label>
-                    <input 
-                      type="text" 
-                      name="sku"
-                      defaultValue={editingProduct?.sku || ''}
-                      className="input" 
-                      required 
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Categoría</label>
-                    <select name="categoryId" className="input" required>
-                      <option value="">Seleccionar categoría...</option>
-                      {categories.map(category => (
-                        <option 
-                          key={category.id} 
-                          value={category.id}
-                          selected={editingProduct?.category.id === category.id}
-                        >
-                          {category.name}
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
+                  <select
+                    required
+                    value={productForm.category}
+                    onChange={(e) => setProductForm({ ...productForm, category: parseInt(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value="">Selecciona una categoría</option>
+                    {categories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
                         </option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="label">Unidad</label>
-                    <select name="unit" className="input" required>
-                      <option value="kg">Kilogramo (kg)</option>
-                      <option value="g">Gramo (g)</option>
-                      <option value="lb">Libra (lb)</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Unidad *</label>
+                  <select
+                    required
+                    value={productForm.unit}
+                    onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
+                    <option value="kg">Kilogramos (kg)</option>
+                    <option value="lb">Libras (lb)</option>
+                    <option value="qq">Quintales (qq)</option>
                       <option value="unidad">Unidad</option>
-                      <option value="litro">Litro</option>
+                    <option value="caja">Caja</option>
+                    <option value="paquete">Paquete</option>
                     </select>
                   </div>
                   <div>
-                    <label className="label">Stock Actual</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock Actual *</label>
                     <input 
                       type="number" 
-                      name="currentStock"
-                      defaultValue={editingProduct?.currentStock || 0}
-                      className="input" 
-                      min="0"
                       required 
+                    min="0"
+                    step="0.01"
+                    value={productForm.current_stock}
+                    onChange={(e) => setProductForm({ ...productForm, current_stock: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
                   <div>
-                    <label className="label">Stock Mínimo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo *</label>
                     <input 
                       type="number" 
-                      name="minStock"
-                      defaultValue={editingProduct?.minStock || 0}
-                      className="input" 
-                      min="0"
                       required 
+                    min="0"
+                    step="0.01"
+                    value={productForm.min_stock}
+                    onChange={(e) => setProductForm({ ...productForm, min_stock: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
                   <div>
-                    <label className="label">Proveedor</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ubicación</label>
                     <input 
                       type="text" 
-                      name="supplier"
-                      defaultValue={editingProduct?.supplier || ''}
-                      className="input" 
-                      required 
+                    value={productForm.location}
+                    onChange={(e) => setProductForm({ ...productForm, location: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     />
                   </div>
                   <div>
-                    <label className="label">Ubicación</label>
-                    <input 
-                      type="text" 
-                      name="location"
-                      defaultValue={editingProduct?.location || ''}
-                      className="input" 
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Estado *</label>
+                  <select
                       required 
-                    />
-                  </div>
-                  <div>
-                    <label className="label">Estado</label>
-                    <select name="status" className="input" required>
+                    value={productForm.status}
+                    onChange={(e) => setProductForm({ ...productForm, status: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                  >
                       <option value="active">Activo</option>
                       <option value="inactive">Inactivo</option>
                       <option value="discontinued">Descontinuado</option>
@@ -834,242 +802,295 @@ export default function Inventory() {
                   </div>
                 </div>
                 
-                <div>
-                  <label className="label">Descripción</label>
-                  <textarea 
-                    name="description"
-                    defaultValue={editingProduct?.description || ''}
-                    className="input" 
-                    rows={3} 
-                    required
-                  ></textarea>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex gap-3 pt-4">
                   <button 
                     type="button"
-                    onClick={() => {
-                      setShowAddProductModal(false)
-                      setEditingProduct(null)
-                    }}
-                    className="btn btn-secondary"
+                  onClick={() => setShowAddProductModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Cancelar
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    <PlusIcon className="h-4 w-4 mr-2" />
-                    {editingProduct ? 'Actualizar Producto' : 'Crear Producto'}
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 font-medium"
+                >
+                  {editingProduct ? 'Actualizar' : 'Crear'} Artículo
                   </button>
                 </div>
               </form>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Add Category Modal */}
+      {/* Modal Categoría */}
       {showAddCategoryModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 p-6 text-white flex justify-between items-center rounded-t-xl">
+              <h2 className="text-xl font-bold">
                   {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
-                </h3>
-                <button 
-                  onClick={() => {
-                    setShowAddCategoryModal(false)
-                    setEditingCategory(null)
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+              </h2>
+              <button onClick={() => setShowAddCategoryModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  const formData = new FormData(e.target as HTMLFormElement)
-                  const categoryData = {
-                    name: formData.get('name') as string,
-                    description: formData.get('description') as string,
-                    color: formData.get('color') as string
-                  }
-                  
-                  if (editingCategory) {
-                    handleUpdateCategory(categoryData)
-                  } else {
-                    handleAddCategory(categoryData)
-                  }
-                }}
-                className="space-y-4"
-              >
+            <form onSubmit={handleSaveCategory} className="p-6 space-y-4">
                 <div>
-                  <label className="label">Nombre de la Categoría</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
                   <input 
                     type="text" 
-                    name="name"
-                    defaultValue={editingCategory?.name || ''}
-                    className="input" 
                     required 
+                  value={categoryForm.name}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   />
                 </div>
-                
                 <div>
-                  <label className="label">Descripción</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
                   <textarea 
-                    name="description"
-                    defaultValue={editingCategory?.description || ''}
-                    className="input" 
+                  value={categoryForm.description}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                     rows={3} 
-                    required
-                  ></textarea>
+                />
                 </div>
-
                 <div>
-                  <label className="label">Color</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Color *</label>
                   <select 
-                    name="color" 
-                    className="input" 
-                    defaultValue={editingCategory?.color || 'bg-green-500'}
                     required
+                  value={categoryForm.color}
+                  onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
-                    <option value="bg-blue-500">Azul</option>
-                    <option value="bg-green-500">Verde</option>
                     <option value="bg-red-500">Rojo</option>
+                  <option value="bg-orange-500">Naranja</option>
                     <option value="bg-yellow-500">Amarillo</option>
+                  <option value="bg-green-500">Verde</option>
+                  <option value="bg-blue-500">Azul</option>
+                  <option value="bg-indigo-500">Índigo</option>
                     <option value="bg-purple-500">Morado</option>
                     <option value="bg-pink-500">Rosa</option>
-                    <option value="bg-indigo-500">Índigo</option>
                     <option value="bg-gray-500">Gris</option>
                   </select>
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex gap-3 pt-4">
                   <button 
                     type="button"
-                    onClick={() => {
-                      setShowAddCategoryModal(false)
-                      setEditingCategory(null)
-                    }}
-                    className="btn btn-secondary"
+                  onClick={() => setShowAddCategoryModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Cancelar
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    <TagIcon className="h-4 w-4 mr-2" />
-                    {editingCategory ? 'Actualizar Categoría' : 'Crear Categoría'}
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:from-purple-700 hover:to-indigo-700 font-medium"
+                >
+                  {editingCategory ? 'Actualizar' : 'Crear'} Categoría
                   </button>
                 </div>
               </form>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Stock Movement Modal */}
-      {showStockMovementModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Movimiento de Stock</h3>
-                <button 
-                  onClick={() => setShowStockMovementModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+      {/* Modal Movimiento de Stock */}
+      {showStockMovementModal && selectedProduct && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white flex justify-between items-center rounded-t-xl">
+              <h2 className="text-xl font-bold">Movimiento de Stock</h2>
+              <button onClick={() => setShowStockMovementModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  const formData = new FormData(e.target as HTMLFormElement)
-                  const product = products.find(p => p.id === Number(formData.get('productId')))
-                  
-                  if (product) {
-                    const movementData = {
-                      product,
-                      type: formData.get('type') as StockMovement['type'],
-                      quantity: Number(formData.get('quantity')),
-                      reason: formData.get('reason') as string,
-                      reference: formData.get('reference') as string,
-                      user: 'Usuario Actual' // TODO: Get from auth context
-                    }
-                    handleStockMovement(movementData)
-                  }
-                }}
-                className="space-y-4"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-6">
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600">Artículo</p>
+                <p className="font-semibold text-gray-900">{selectedProduct.name}</p>
+                <p className="text-sm text-gray-500">Stock actual: {selectedProduct.current_stock} {selectedProduct.unit}</p>
+              </div>
+
+              <form onSubmit={handleSaveStockMovement} className="space-y-4">
                   <div>
-                    <label className="label">Producto</label>
-                    <select name="productId" className="input" required>
-                      <option value="">Seleccionar producto...</option>
-                      {products.map(product => (
-                        <option key={product.id} value={product.id}>
-                          {product.name} - {product.sku}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="label">Tipo de Movimiento</label>
-                    <select name="type" className="input" required>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Movimiento *</label>
+                  <select
+                    required
+                    value={movementForm.movement_type}
+                    onChange={(e) => setMovementForm({ ...movementForm, movement_type: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
                       <option value="in">Entrada</option>
                       <option value="out">Salida</option>
                       <option value="adjustment">Ajuste</option>
                     </select>
                   </div>
                   <div>
-                    <label className="label">Cantidad</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad *</label>
                     <input 
                       type="number" 
-                      name="quantity"
-                      className="input" 
-                      min="0.01"
-                      step="0.01"
                       required 
+                    min="0"
+                    step="0.01"
+                    value={movementForm.quantity}
+                    onChange={(e) => setMovementForm({ ...movementForm, quantity: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
                   <div>
-                    <label className="label">Referencia</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Referencia</label>
                     <input 
                       type="text" 
-                      name="reference"
-                      className="input" 
-                      placeholder="Número de factura, orden, etc."
+                    value={movementForm.reference}
+                    onChange={(e) => setMovementForm({ ...movementForm, reference: e.target.value })}
+                    placeholder="Ej: Factura #123, Pedido #456"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     />
                   </div>
-                </div>
-                
                 <div>
-                  <label className="label">Motivo</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                  <input
+                    type="text"
+                    value={movementForm.user}
+                    onChange={(e) => setMovementForm({ ...movementForm, user: e.target.value })}
+                    placeholder="Nombre del usuario"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
                   <textarea 
-                    name="reason"
-                    className="input" 
+                    value={movementForm.notes}
+                    onChange={(e) => setMovementForm({ ...movementForm, notes: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                     rows={3} 
-                    placeholder="Describir el motivo del movimiento..."
-                    required
-                  ></textarea>
+                  />
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4">
+                <div className="flex gap-3 pt-4">
                   <button 
                     type="button"
                     onClick={() => setShowStockMovementModal(false)}
-                    className="btn btn-secondary"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Cancelar
                   </button>
-                  <button type="submit" className="btn btn-primary">
-                    <ArrowUpIcon className="h-4 w-4 mr-2" />
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 font-medium"
+                  >
                     Registrar Movimiento
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Gestión de Categorías */}
+      {showCategoryManagerModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-amber-600 to-orange-600 p-6 text-white flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-bold">Gestión de Categorías</h2>
+                <p className="text-amber-100 text-sm">Administra las categorías de inventario</p>
+              </div>
+              <button
+                onClick={() => setShowCategoryManagerModal(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              {/* Botón para agregar nueva categoría */}
+              <div className="mb-6">
+                <button
+                  onClick={() => {
+                    setEditingCategory(null)
+                    setCategoryForm({
+                      name: '',
+                      description: '',
+                      color: 'bg-blue-500'
+                    })
+                    setShowAddCategoryModal(true)
+                  }}
+                  className="bg-gradient-to-r from-amber-600 to-orange-600 text-white px-6 py-2.5 rounded-lg hover:from-amber-700 hover:to-orange-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all font-semibold"
+                >
+                  <PlusIcon className="h-5 w-5" />
+                  Nueva Categoría
+                </button>
+              </div>
+
+              {/* Grid de categorías */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {categories.map((category) => (
+                  <div key={category.id} className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-lg border border-gray-200 p-4 hover:shadow-xl transition-shadow">
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className={`w-12 h-12 ${category.color} rounded-full flex items-center justify-center shadow-md`}>
+                          <TagIcon className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 truncate">{category.name}</h3>
+                          <p className="text-sm text-gray-500">{category.product_count} artículos</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {category.description && (
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{category.description}</p>
+                    )}
+
+                    <div className="flex gap-2 pt-3 border-t border-gray-200">
+                      <button
+                        onClick={() => {
+                          setEditingCategory(category)
+                          setCategoryForm({
+                            name: category.name,
+                            description: category.description,
+                            color: category.color
+                          })
+                          setShowAddCategoryModal(true)
+                        }}
+                        className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+                      >
+                        <PencilIcon className="h-4 w-4" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(category.id)}
+                        className="py-2 px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors flex items-center justify-center"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {categories.length === 0 && (
+                <div className="text-center py-12">
+                  <TagIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <h3 className="mt-2 text-sm font-medium text-gray-900">No hay categorías</h3>
+                  <p className="mt-1 text-sm text-gray-500">Comienza creando una nueva categoría</p>
+                </div>
+              )}
+
+              {/* Botón cerrar */}
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowCategoryManagerModal(false)}
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
         </div>

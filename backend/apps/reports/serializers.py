@@ -10,7 +10,7 @@ class ReportSerializer(serializers.ModelSerializer):
     """Serializer for Report model"""
     
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
-    file_url = serializers.CharField(source='file_url', read_only=True)
+    file_url = serializers.CharField(read_only=True)
     is_ready = serializers.BooleanField(read_only=True)
     
     class Meta:
@@ -126,14 +126,63 @@ class ReportGenerationSerializer(serializers.Serializer):
     
     report_type = serializers.ChoiceField(choices=Report.REPORT_TYPES)
     format = serializers.ChoiceField(choices=Report.FORMAT_CHOICES, default='pdf')
-    start_date = serializers.DateTimeField(required=False)
-    end_date = serializers.DateTimeField(required=False)
-    parameters = serializers.JSONField(default=dict)
-    filters = serializers.JSONField(default=dict)
+    start_date = serializers.CharField(required=False, allow_blank=True)
+    end_date = serializers.CharField(required=False, allow_blank=True)
+    parameters = serializers.JSONField(default=dict, required=False)
+    filters = serializers.JSONField(default=dict, required=False)
     template_id = serializers.IntegerField(required=False)
+    
+    def validate_start_date(self, value):
+        """Convert string to datetime if provided"""
+        from django.utils.dateparse import parse_datetime
+        if value:
+            parsed = parse_datetime(value)
+            if not parsed:
+                # Try parsing as date string
+                from datetime import datetime
+                try:
+                    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except:
+                    raise serializers.ValidationError("Formato de fecha inválido")
+            return parsed
+        return None
+    
+    def validate_end_date(self, value):
+        """Convert string to datetime if provided"""
+        from django.utils.dateparse import parse_datetime
+        if value:
+            parsed = parse_datetime(value)
+            if not parsed:
+                # Try parsing as date string
+                from datetime import datetime
+                try:
+                    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except:
+                    raise serializers.ValidationError("Formato de fecha inválido")
+            return parsed
+        return None
     
     def validate(self, data):
         """Validate generation parameters"""
+        # Check if dates are in parameters dict
+        if 'parameters' in data and isinstance(data['parameters'], dict):
+            if 'start_date' in data['parameters'] and not data.get('start_date'):
+                from django.utils.dateparse import parse_datetime
+                from datetime import datetime
+                start_str = data['parameters']['start_date']
+                try:
+                    data['start_date'] = datetime.fromisoformat(start_str.replace('Z', '+00:00'))
+                except:
+                    pass
+            
+            if 'end_date' in data['parameters'] and not data.get('end_date'):
+                from datetime import datetime
+                end_str = data['parameters']['end_date']
+                try:
+                    data['end_date'] = datetime.fromisoformat(end_str.replace('Z', '+00:00'))
+                except:
+                    pass
+        
         if data.get('end_date') and data.get('start_date'):
             if data['end_date'] <= data['start_date']:
                 raise serializers.ValidationError("La fecha de fin debe ser posterior a la fecha de inicio")

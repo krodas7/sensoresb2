@@ -14,6 +14,14 @@ from drf_spectacular.types import OpenApiTypes
 
 from .models import Report, ReportLog, ReportData
 from .serializers import ReportSerializer, ReportGenerationSerializer, ReportStatsSerializer
+from .report_generators import (
+    generate_attendance_report,
+    generate_cupping_report,
+    generate_shipping_weights_report,
+    generate_integrations_report,
+    generate_temperature_report,
+    generate_occupation_report
+)
 from apps.core.exceptions import ErrorResponse, ReportGenerationException
 from apps.lots.models import Lot
 from apps.temperatures.models import Reading
@@ -103,12 +111,19 @@ def generate_report(request):
             status='generating'
         )
         
-        # Log report creation
+        # Log report creation - convert dates to strings for JSON serialization
+        log_details = {}
+        for key, value in data.items():
+            if hasattr(value, 'isoformat'):  # datetime objects
+                log_details[key] = value.isoformat()
+            else:
+                log_details[key] = value
+        
         ReportLog.objects.create(
             report=report,
             level='info',
             message='Reporte creado y en proceso de generación',
-            details={'parameters': data}
+            details=log_details
         )
         
         # Generate report data
@@ -118,7 +133,7 @@ def generate_report(request):
             # Generate PDF if format is PDF
             if report.format == 'pdf':
                 pdf_path = generate_pdf_report(report, report_data)
-                report.file_url = pdf_path
+                report.file_path = pdf_path
                 report.status = 'completed'
             else:
                 report.status = 'completed'
@@ -167,7 +182,19 @@ def generate_report(request):
 def generate_report_data(report):
     """Generate report data based on type"""
     try:
-        if report.report_type == 'daily_production':
+        if report.report_type == 'attendance':
+            data = generate_attendance_report(report)
+        elif report.report_type == 'cupping':
+            data = generate_cupping_report(report)
+        elif report.report_type == 'shipping_weights':
+            data = generate_shipping_weights_report(report)
+        elif report.report_type == 'integrations':
+            data = generate_integrations_report(report)
+        elif report.report_type == 'temperature':
+            data = generate_temperature_report(report)
+        elif report.report_type == 'occupation':
+            data = generate_occupation_report(report)
+        elif report.report_type == 'daily_production':
             data = generate_daily_production_report(report)
         elif report.report_type == 'temperature_summary':
             data = generate_temperature_summary_report(report)

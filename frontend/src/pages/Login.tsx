@@ -1,38 +1,25 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
+import { useAuthStore } from '../stores/authStore'
 import '../styles/login.css'
 
 export default function Login() {
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
-  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+  const { login, isLoading } = useAuthStore()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     
     try {
-      const response = await fetch('http://localhost:8000/api/v1/auth/login/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        toast.success('¡Login exitoso!')
-        console.log('Login data:', data)
-        // Redirigir al dashboard
-        window.location.href = '/'
-      } else {
-        toast.error('Credenciales inválidas')
-      }
+      await login(username, password)
+      toast.success('¡Login exitoso!')
+      navigate('/')
     } catch (error) {
-      toast.error('Error de conexión')
-    } finally {
-      setLoading(false)
+      toast.error('Credenciales inválidas')
+      console.error('Login error:', error)
     }
   }
 
@@ -72,10 +59,10 @@ export default function Login() {
           
           <button
             type="submit"
-            disabled={loading}
+            disabled={isLoading}
             className="w-full bg-gradient-to-r from-green-600 to-green-700 text-white py-3 px-4 rounded-lg hover:from-green-700 hover:to-green-800 disabled:opacity-50 transition-all font-medium"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {isLoading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
         

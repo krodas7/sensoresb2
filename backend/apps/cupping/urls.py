@@ -4,6 +4,7 @@ from . import views
 
 router = DefaultRouter()
 router.register(r'cuppings', views.CuppingViewSet, basename='cupping')
+router.register(r'commercial', views.CommercialCuppingViewSet, basename='commercial-cupping')
 router.register(r'samples', views.CuppingSampleViewSet, basename='cupping-sample')
 router.register(r'cuppers', views.CupperViewSet, basename='cupper')
 router.register(r'scores', views.CuppingScoreViewSet, basename='cupping-score')

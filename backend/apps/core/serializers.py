@@ -149,3 +149,7 @@ class UserWithPermissionsSerializer(serializers.ModelSerializer):
                 'role': obj.profile.role.display_name if obj.profile.role else None
             }
         return {'accessible_modules': [], 'role': None}
+
+
+# Import backup serializers
+from .backup_serializers import BackupRecordSerializer, BackupScheduleSerializer

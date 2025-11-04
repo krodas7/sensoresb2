@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+  <defs>
+    <linearGradient id="coffeeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#5C3317;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="96" cy="96" r="92" fill="url(#coffeeGradient)"/>
+  
+  <!-- Coffee bean icon -->
+  <g transform="translate(96, 96)">
+    <!-- Coffee bean shape -->
+    <ellipse cx="0" cy="0" rx="45" ry="60" fill="#D2691E" transform="rotate(-20)"/>
+    
+    <!-- Bean crack/line -->
+    <path d="M -15,-50 Q -5,-25 0,0 Q 5,25 15,50" 
+          stroke="#8B4513" 
+          stroke-width="4" 
+          fill="none" 
+          stroke-linecap="round"
+          transform="rotate(-20)"/>
+    
+    <!-- Highlight -->
+    <ellipse cx="-15" cy="-20" rx="12" ry="18" 
+             fill="#FFA07A" 
+             opacity="0.4"
+             transform="rotate(-20)"/>
+  </g>
+  
+  <!-- Text overlay for branding (optional) -->
+  <text x="96" y="170" 
+        font-family="Arial, sans-serif" 
+        font-size="18" 
+        font-weight="bold" 
+        text-anchor="middle" 
+        fill="white"
+        opacity="0.9">BENEFICIO</text>
+</svg>

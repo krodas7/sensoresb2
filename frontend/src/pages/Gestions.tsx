@@ -1,1956 +1,1512 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { 
   ClipboardDocumentListIcon,
   PlusIcon, 
   TrashIcon,
   PencilIcon,
-  EyeIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
-  BoltIcon,
-  TruckIcon,
-  CurrencyDollarIcon,
-  ClockIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  DocumentTextIcon,
-  UserGroupIcon,
   ShoppingCartIcon,
   CreditCardIcon,
+  CheckCircleIcon,
+  MagnifyingGlassIcon,
+  UserPlusIcon,
+  BanknotesIcon,
+  ShieldCheckIcon,
+  BoltIcon,
   CalendarDaysIcon,
-  ArrowPathIcon,
-  ChartBarIcon,
-  BuildingOfficeIcon
+  DocumentTextIcon,
+  UserIcon,
+  CubeIcon,
+  ScaleIcon,
+  CurrencyDollarIcon,
+  ClockIcon,
+  BuildingOfficeIcon,
+  FireIcon,
 } from '@heroicons/react/24/outline'
+import api from '../services/api'
+import toast from 'react-hot-toast'
+import { useAuthStore } from '../stores/authStore'
 
-// Interfaces
+// Interfaces adaptadas al backend
 interface MaterialRequest {
-  id: number
-  type: 'herrería' | 'electricidad'
+  id?: number
+  type: 'herreria' | 'electricidad'
   title: string
   description: string
-  materials: Material[]
-  requestedBy: string
-  requestedDate: string
+  materials?: Material[]
+  requested_by: string
+  requested_date: string
   priority: 'baja' | 'media' | 'alta' | 'urgente'
   status: 'pendiente' | 'aprobado' | 'en_proceso' | 'completado' | 'rechazado'
-  approvedBy?: string
-  approvedDate?: string
-  completedDate?: string
-  estimatedCost: number
-  actualCost?: number
+  approved_by?: string
+  approved_date?: string
+  completed_date?: string
+  estimated_cost: number
+  actual_cost?: number
   notes?: string
-  createdAt: string
+  created_at?: string
+  updated_at?: string
 }
 
 interface Material {
-  id: number
+  id?: number
   name: string
   description: string
   quantity: number
   unit: string
-  estimatedPrice: number
-  actualPrice?: number
+  estimated_price: number
+  actual_price?: number
   supplier?: string
 }
 
 interface FoodTicket {
-  id: number
-  shift: 'día' | 'noche'
+  id?: number
+  shift: 'dia' | 'noche'
   date: string
-  employees: Array<{
-    id: string
-    name: string
-    employeeId?: string
-  }>
-  mealType: 'desayuno' | 'almuerzo' | 'cena' | 'refrigerio'
-  unitCost: number
-  totalAmount: number
-  employeeCount: number
+  employees?: FoodTicketEmployee[]
+  meal_type: 'desayuno' | 'almuerzo' | 'cena'
+  unit_cost: number
+  total_amount: number
+  employee_count: number
   description: string
   status: 'pendiente' | 'aprobado' | 'pagado'
-  approvedBy?: string
-  approvedDate?: string
-  paidDate?: string
-  paymentDocuments?: Array<{
-    id: string
-    name: string
-    type: 'image' | 'pdf'
-    url: string
-    uploadedAt: string
-  }>
-  paymentReference?: string
-  paymentMethod?: 'efectivo' | 'transferencia' | 'cheque'
-  createdAt: string
+  approved_by?: string
+  approved_date?: string
+  paid_date?: string
+  payment_reference?: string
+  payment_method?: 'efectivo' | 'transferencia' | 'cheque'
+  created_at?: string
+  updated_at?: string
+}
+
+interface FoodTicketEmployee {
+  id?: number
+  employee_name: string
+  employee_id?: string
 }
 
 interface PaymentTicket {
-  id: number
-  type: 'hora' | 'día'
-  workerName: string
-  workerId?: string
-  workDescription: string
+  id?: number
+  type: 'hora' | 'dia'
+  worker_name: string
+  worker_id?: string
+  work_description: string
   hours?: number
   days?: number
-  ratePerHour?: number
-  ratePerDay?: number
-  totalAmount: number
-  workDate: string
+  rate_per_hour?: number
+  rate_per_day?: number
+  total_amount: number
+  work_date: string
   status: 'pendiente' | 'aprobado' | 'pagado'
-  approvedBy?: string
-  approvedDate?: string
-  paidDate?: string
+  approved_by?: string
+  approved_date?: string
+  paid_date?: string
+  payment_reference?: string
+  payment_method?: 'efectivo' | 'transferencia' | 'cheque'
   notes?: string
-  createdAt: string
+  created_at?: string
+  updated_at?: string
 }
 
 export default function Gestions() {
+  const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<'materials' | 'food' | 'payments'>('materials')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedStatus, setSelectedStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+  
+  // Verificar si el usuario puede aprobar/pagar
+  const canApprove = user?.role === 'admin' || user?.role === 'rrhh'
+  
+  // Estados para cada módulo
+  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([])
+  const [foodTickets, setFoodTickets] = useState<FoodTicket[]>([])
+  const [paymentTickets, setPaymentTickets] = useState<PaymentTicket[]>([])
+  
+  // Estados de modales
   const [showAddModal, setShowAddModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showViewModal, setShowViewModal] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<any>(null)
   const [editingItem, setEditingItem] = useState<any>(null)
-  const [modalType, setModalType] = useState<'material' | 'food' | 'payment'>('material')
-  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
-  const [showBulkPaymentModal, setShowBulkPaymentModal] = useState(false)
-  const [selectedTicketsForPayment, setSelectedTicketsForPayment] = useState<number[]>([])
-  const [paymentFiles, setPaymentFiles] = useState<File[]>([])
-  const [paymentMethod, setPaymentMethod] = useState<'efectivo' | 'transferencia' | 'cheque'>('efectivo')
-  const [paymentReference, setPaymentReference] = useState('')
-
-  // Lista de empleados disponibles
-  const availableEmployees = [
-    { id: '1', name: 'Juan Pérez', employeeId: 'EMP001' },
-    { id: '2', name: 'María García', employeeId: 'EMP002' },
-    { id: '3', name: 'Carlos López', employeeId: 'EMP003' },
-    { id: '4', name: 'Ana Rodríguez', employeeId: 'EMP004' },
-    { id: '5', name: 'Luis Martínez', employeeId: 'EMP005' },
-    { id: '6', name: 'Carmen Silva', employeeId: 'EMP006' },
-    { id: '7', name: 'Roberto Díaz', employeeId: 'EMP007' },
-    { id: '8', name: 'Elena Vargas', employeeId: 'EMP008' },
-    { id: '9', name: 'Miguel Torres', employeeId: 'EMP009' },
-    { id: '10', name: 'Isabel Morales', employeeId: 'EMP010' },
-  ]
-
-  // Sample data
-  const [materialRequests, setMaterialRequests] = useState<MaterialRequest[]>([
-    {
-      id: 1,
-      type: 'herrería',
-      title: 'Reparación de Portón Principal',
-      description: 'Soldadura y refuerzo del portón principal del almacén',
-      materials: [
-        { id: 1, name: 'Varilla de acero 1/2"', description: 'Varilla de 6 metros', quantity: 4, unit: 'unidades', estimatedPrice: 25.00, supplier: 'Ferretería Central' },
-        { id: 2, name: 'Electrodo 6013', description: 'Electrodo para soldadura', quantity: 2, unit: 'kg', estimatedPrice: 15.00, supplier: 'Ferretería Central' },
-        { id: 3, name: 'Pintura anticorrosiva', description: 'Pintura roja anticorrosiva', quantity: 1, unit: 'galón', estimatedPrice: 35.00, supplier: 'Ferretería Central' }
-      ],
-      requestedBy: 'Juan Pérez',
-      requestedDate: '2024-01-15',
-      priority: 'alta',
-      status: 'aprobado',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-16',
-      estimatedCost: 75.00,
-      actualCost: 78.50,
-      notes: 'Trabajo completado satisfactoriamente',
-      createdAt: '2024-01-15T08:30:00Z'
-    },
-    {
-      id: 2,
-      type: 'electricidad',
-      title: 'Instalación de Luminarias LED',
-      description: 'Instalación de 8 luminarias LED en el área de procesamiento',
-      materials: [
-        { id: 4, name: 'Luminaria LED 50W', description: 'Luminaria industrial LED', quantity: 8, unit: 'unidades', estimatedPrice: 45.00, supplier: 'Electrocom' },
-        { id: 5, name: 'Cable THW 12 AWG', description: 'Cable eléctrico', quantity: 50, unit: 'metros', estimatedPrice: 2.50, supplier: 'Electrocom' },
-        { id: 6, name: 'Tubería EMT 1/2"', description: 'Tubería metálica', quantity: 30, unit: 'metros', estimatedPrice: 8.00, supplier: 'Electrocom' }
-      ],
-      requestedBy: 'Carlos López',
-      requestedDate: '2024-01-20',
+  
+  // Estados para formularios
+  const [materialForm, setMaterialForm] = useState<MaterialRequest>({
+    type: 'herreria',
+    title: '',
+    description: '',
+    requested_by: '',
+    requested_date: new Date().toISOString().split('T')[0],
       priority: 'media',
-      status: 'en_proceso',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-21',
-      estimatedCost: 450.00,
-      notes: 'En proceso de instalación',
-      createdAt: '2024-01-20T10:15:00Z'
-    }
-  ])
+    status: 'pendiente',
+    estimated_cost: 0,
+  })
+  
+  const [tempMaterials, setTempMaterials] = useState<Material[]>([])
+  const [currentMaterial, setCurrentMaterial] = useState<Material>({
+    name: '',
+    description: '',
+    quantity: 0,
+    unit: 'unidades',
+    estimated_price: 0,
+  })
+  
+  const [foodForm, setFoodForm] = useState<FoodTicket>({
+    shift: 'dia',
+    date: new Date().toISOString().split('T')[0],
+    meal_type: 'almuerzo',
+    unit_cost: 0,
+    total_amount: 0,
+    employee_count: 0,
+    description: '',
+    status: 'pendiente',
+  })
+  
+  const [tempEmployees, setTempEmployees] = useState<FoodTicketEmployee[]>([])
+  const [currentEmployee, setCurrentEmployee] = useState<FoodTicketEmployee>({
+    employee_name: '',
+    employee_id: '',
+  })
+  
+  const [paymentForm, setPaymentForm] = useState<PaymentTicket>({
+    type: 'hora',
+    worker_name: '',
+    worker_id: '',
+    work_description: '',
+    hours: 0,
+    rate_per_hour: 0,
+    total_amount: 0,
+    work_date: new Date().toISOString().split('T')[0],
+    status: 'pendiente',
+  })
 
-  const [foodTickets, setFoodTickets] = useState<FoodTicket[]>([
-    {
-      id: 1,
-      shift: 'día',
-      date: '2024-01-15',
-      employees: [
-        { id: '4', name: 'Ana Rodríguez', employeeId: 'EMP004' },
-        { id: '5', name: 'Luis Martínez', employeeId: 'EMP005' }
-      ],
-      mealType: 'almuerzo',
-      unitCost: 12.50,
-      totalAmount: 25.00,
-      employeeCount: 2,
-      description: 'Almuerzo en comedor local',
-      status: 'pagado',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-15T12:00:00Z',
-      paidDate: '2024-01-15T14:30:00Z',
-      createdAt: '2024-01-15T11:45:00Z'
-    },
-    {
-      id: 2,
-      shift: 'noche',
-      date: '2024-01-15',
-      employees: [
-        { id: '7', name: 'Roberto Díaz', employeeId: 'EMP007' }
-      ],
-      mealType: 'cena',
-      unitCost: 15.00,
-      totalAmount: 15.00,
-      employeeCount: 1,
-      description: 'Cena en restaurante 24h',
-      status: 'aprobado',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-15T18:00:00Z',
-      createdAt: '2024-01-15T17:30:00Z'
-    }
-  ])
+  useEffect(() => {
+    fetchData()
+  }, [activeTab])
 
-  const [paymentTickets, setPaymentTickets] = useState<PaymentTicket[]>([
-    {
-      id: 1,
-      type: 'hora',
-      workerName: 'Roberto Silva',
-      workerId: 'EXT001',
-      workDescription: 'Carga de trailer con café procesado',
-      hours: 6,
-      ratePerHour: 8.50,
-      totalAmount: 51.00,
-      workDate: '2024-01-15',
-      status: 'pagado',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-15T16:00:00Z',
-      paidDate: '2024-01-15T17:00:00Z',
-      notes: 'Trabajo de carga nocturna',
-      createdAt: '2024-01-15T15:30:00Z'
-    },
-    {
-      id: 2,
-      type: 'día',
-      workerName: 'Miguel Torres',
-      workDescription: 'Limpieza general de instalaciones',
-      days: 2,
-      ratePerDay: 60.00,
-      totalAmount: 120.00,
-      workDate: '2024-01-16',
-      status: 'aprobado',
-      approvedBy: 'María García',
-      approvedDate: '2024-01-16T09:00:00Z',
-      notes: 'Limpieza post-procesamiento',
-      createdAt: '2024-01-16T08:00:00Z'
-    }
-  ])
-
-  // CRUD Functions
-  const handleAddItem = (itemData: any) => {
-    if (modalType === 'material') {
-      const newItem: MaterialRequest = {
-        ...itemData,
-        id: Math.max(...materialRequests.map(r => r.id), 0) + 1,
-        createdAt: new Date().toISOString()
-      }
-      setMaterialRequests(prev => [...prev, newItem])
-    } else if (modalType === 'food') {
-      const selectedEmployeesData = getSelectedEmployeesData()
-      const unitCost = parseFloat(itemData.unitCost) || 0
-      const employeeCount = selectedEmployeesData.length
-      const totalAmount = unitCost * employeeCount
-      
-      const newItem: FoodTicket = {
-        ...itemData,
-        employees: selectedEmployeesData,
-        unitCost,
-        totalAmount,
-        employeeCount,
-        id: Math.max(...foodTickets.map(t => t.id), 0) + 1,
-        createdAt: new Date().toISOString()
-      }
-      setFoodTickets(prev => [...prev, newItem])
-    } else if (modalType === 'payment') {
-      const newItem: PaymentTicket = {
-        ...itemData,
-        id: Math.max(...paymentTickets.map(t => t.id), 0) + 1,
-        createdAt: new Date().toISOString()
-      }
-      setPaymentTickets(prev => [...prev, newItem])
-    }
-    setShowAddModal(false)
-    setSelectedEmployees([]) // Limpiar selección después de crear
-  }
-
-  const handleEditItem = (itemData: any) => {
-    if (modalType === 'material') {
-      setMaterialRequests(prev => prev.map(r => 
-        r.id === editingItem.id ? { ...r, ...itemData } : r
-      ))
-    } else if (modalType === 'food') {
-      const selectedEmployeesData = getSelectedEmployeesData()
-      const unitCost = parseFloat(itemData.unitCost) || 0
-      const employeeCount = selectedEmployeesData.length
-      const totalAmount = unitCost * employeeCount
-      
-      setFoodTickets(prev => prev.map(t => 
-        t.id === editingItem.id ? { 
-          ...t, 
-          ...itemData,
-          employees: selectedEmployeesData,
-          unitCost,
-          totalAmount,
-          employeeCount
-        } : t
-      ))
-    } else if (modalType === 'payment') {
-      setPaymentTickets(prev => prev.map(t => 
-        t.id === editingItem.id ? { ...t, ...itemData } : t
-      ))
-    }
-    setShowEditModal(false)
-    setEditingItem(null)
-    setSelectedEmployees([]) // Limpiar selección después de editar
-  }
-
-  const handleDeleteItem = (id: number) => {
-    if (window.confirm('¿Estás seguro de que quieres eliminar este elemento?')) {
+  const fetchData = async () => {
+    try {
+      setLoading(true)
       if (activeTab === 'materials') {
-        setMaterialRequests(prev => prev.filter(r => r.id !== id))
+        const response = await api.get('/gestions/material-requests/')
+        const data = response.data.results || response.data || []
+        setMaterialRequests(Array.isArray(data) ? data : [])
       } else if (activeTab === 'food') {
-        setFoodTickets(prev => prev.filter(t => t.id !== id))
+        const response = await api.get('/gestions/food-tickets/')
+        const data = response.data.results || response.data || []
+        setFoodTickets(Array.isArray(data) ? data : [])
       } else if (activeTab === 'payments') {
-        setPaymentTickets(prev => prev.filter(t => t.id !== id))
+        const response = await api.get('/gestions/payment-tickets/')
+        const data = response.data.results || response.data || []
+        setPaymentTickets(Array.isArray(data) ? data : [])
       }
+    } catch (error) {
+      console.error('Error fetching data:', error)
+      toast.error('Error al cargar datos')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleViewItem = (item: any) => {
-    setSelectedItem(item)
-    setShowViewModal(true)
-  }
-
-  const handleEditClick = (item: any) => {
-    setEditingItem(item)
-    setModalType(activeTab === 'materials' ? 'material' : activeTab === 'food' ? 'food' : 'payment')
+  // Material Request handlers
+  const handleSaveMaterialRequest = async (e: React.FormEvent) => {
+    e.preventDefault()
     
-    // Si es un food ticket, cargar empleados seleccionados
-    if (activeTab === 'food' && item.employees) {
-      setSelectedEmployees(item.employees.map((emp: any) => emp.id))
+    try {
+      // Calcular costo estimado total
+      const totalCost = tempMaterials.reduce((sum, m) => sum + (m.quantity * m.estimated_price), 0)
+      const requestData = { ...materialForm, estimated_cost: totalCost }
+      
+      let savedRequest
+      if (editingItem) {
+        const response = await api.put(`/gestions/material-requests/${editingItem.id}/`, requestData)
+        savedRequest = response.data
+        toast.success('Solicitud actualizada')
     } else {
-      setSelectedEmployees([])
+        const response = await api.post('/gestions/material-requests/', requestData)
+        savedRequest = response.data
+        toast.success('Solicitud creada')
+      }
+      
+      // Guardar materiales
+      for (const material of tempMaterials) {
+        await api.post('/gestions/materials/', {
+          ...material,
+          request: savedRequest.id
+        })
+      }
+      
+      fetchData()
+      setShowAddModal(false)
+      resetForms()
+    } catch (error) {
+      console.error('Error saving:', error)
+      toast.error('Error al guardar')
     }
-    
-    setShowEditModal(true)
   }
 
-  const handleAddClick = () => {
-    setModalType(activeTab === 'materials' ? 'material' : activeTab === 'food' ? 'food' : 'payment')
-    setSelectedEmployees([]) // Limpiar selección al abrir modal
+  const handleSaveFoodTicket = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      const ticketData = {
+        ...foodForm,
+        employee_count: tempEmployees.length,
+        total_amount: tempEmployees.length * foodForm.unit_cost,
+      }
+      
+      let savedTicket
+      if (editingItem) {
+        const response = await api.put(`/gestions/food-tickets/${editingItem.id}/`, ticketData)
+        savedTicket = response.data
+        toast.success('Vale actualizado')
+      } else {
+        const response = await api.post('/gestions/food-tickets/', ticketData)
+        savedTicket = response.data
+        toast.success('Vale creado')
+      }
+      
+      // Guardar empleados (nota: el backend actual no tiene endpoint para esto, se puede mejorar)
+      
+      fetchData()
+      setShowAddModal(false)
+      resetForms()
+    } catch (error) {
+      console.error('Error saving:', error)
+      toast.error('Error al guardar')
+    }
+  }
+
+  const handleSavePaymentTicket = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      // Calcular total
+      const total = paymentForm.type === 'hora' 
+        ? (paymentForm.hours || 0) * (paymentForm.rate_per_hour || 0)
+        : (paymentForm.days || 0) * (paymentForm.rate_per_day || 0)
+      
+      const ticketData = { ...paymentForm, total_amount: total }
+      
+      if (editingItem) {
+        await api.put(`/gestions/payment-tickets/${editingItem.id}/`, ticketData)
+        toast.success('Vale actualizado')
+      } else {
+        await api.post('/gestions/payment-tickets/', ticketData)
+        toast.success('Vale creado')
+      }
+      
+      fetchData()
+      setShowAddModal(false)
+      resetForms()
+    } catch (error) {
+      console.error('Error saving:', error)
+      toast.error('Error al guardar')
+    }
+  }
+
+  const handleDeleteMaterial = async (id: number) => {
+    if (!confirm('¿Estás seguro de eliminar esta solicitud?')) return
+    
+    try {
+      await api.delete(`/gestions/material-requests/${id}/`)
+      toast.success('Solicitud eliminada')
+      fetchData()
+    } catch (error) {
+      console.error('Error deleting:', error)
+      toast.error('Error al eliminar')
+    }
+  }
+
+  const handleDeleteFood = async (id: number) => {
+    if (!confirm('¿Estás seguro de eliminar este vale?')) return
+    
+    try {
+      await api.delete(`/gestions/food-tickets/${id}/`)
+      toast.success('Vale eliminado')
+      fetchData()
+    } catch (error) {
+      console.error('Error deleting:', error)
+      toast.error('Error al eliminar')
+    }
+  }
+
+  const handleDeletePayment = async (id: number) => {
+    if (!confirm('¿Estás seguro de eliminar este vale?')) return
+    
+    try {
+      await api.delete(`/gestions/payment-tickets/${id}/`)
+      toast.success('Vale eliminado')
+      fetchData()
+    } catch (error) {
+      console.error('Error deleting:', error)
+      toast.error('Error al eliminar')
+    }
+  }
+
+  const handleApprove = async (type: 'material' | 'food' | 'payment', id: number) => {
+    // Validar permisos
+    if (!canApprove) {
+      toast.error('No tienes permisos para aprobar. Solo Admin y RRHH pueden aprobar.')
+      return
+    }
+
+    if (!confirm('¿Estás seguro de aprobar esta gestión?')) return
+    
+    try {
+      const endpoint = type === 'material' ? 'material-requests' : type === 'food' ? 'food-tickets' : 'payment-tickets'
+      const approverName = user?.username || `${user?.first_name} ${user?.last_name}`.trim() || 'Usuario'
+      
+      await api.patch(`/gestions/${endpoint}/${id}/`, {
+        status: 'aprobado',
+        approved_by: approverName,
+        approved_date: new Date().toISOString().split('T')[0],
+      })
+      
+      toast.success(`✅ Aprobado por ${approverName}`)
+      fetchData()
+    } catch (error) {
+      console.error('Error approving:', error)
+      toast.error('Error al aprobar')
+    }
+  }
+
+  const handlePay = async (type: 'food' | 'payment', id: number) => {
+    // Validar permisos
+    if (!canApprove) {
+      toast.error('No tienes permisos para registrar pagos. Solo Admin y RRHH pueden hacerlo.')
+      return
+    }
+
+    const reference = prompt('Ingresa la referencia de pago (número de transferencia, cheque, etc.):')
+    if (!reference) return
+    
+    const method = prompt('Método de pago (efectivo/transferencia/cheque):') || 'transferencia'
+    
+    try {
+      const endpoint = type === 'food' ? 'food-tickets' : 'payment-tickets'
+      await api.patch(`/gestions/${endpoint}/${id}/`, {
+        status: 'pagado',
+        paid_date: new Date().toISOString().split('T')[0],
+        payment_reference: reference,
+        payment_method: method,
+      })
+      
+      toast.success(`💰 Pago registrado - Ref: ${reference}`)
+      fetchData()
+    } catch (error) {
+      console.error('Error paying:', error)
+      toast.error('Error al registrar pago')
+    }
+  }
+
+  const addMaterial = () => {
+    if (!currentMaterial.name || currentMaterial.quantity <= 0) {
+      toast.error('Complete los datos del material')
+      return
+    }
+    setTempMaterials([...tempMaterials, { ...currentMaterial }])
+    setCurrentMaterial({
+      name: '',
+      description: '',
+      quantity: 0,
+      unit: 'unidades',
+      estimated_price: 0,
+    })
+  }
+
+  const removeMaterial = (index: number) => {
+    setTempMaterials(tempMaterials.filter((_, i) => i !== index))
+  }
+
+  const addEmployee = () => {
+    if (!currentEmployee.employee_name) {
+      toast.error('Ingrese el nombre del empleado')
+      return
+    }
+    setTempEmployees([...tempEmployees, { ...currentEmployee }])
+    setCurrentEmployee({ employee_name: '', employee_id: '' })
+  }
+
+  const removeEmployee = (index: number) => {
+    setTempEmployees(tempEmployees.filter((_, i) => i !== index))
+  }
+
+  const resetForms = () => {
+    setMaterialForm({
+      type: 'herreria',
+      title: '',
+      description: '',
+      requested_by: '',
+      requested_date: new Date().toISOString().split('T')[0],
+      priority: 'media',
+      status: 'pendiente',
+      estimated_cost: 0,
+    })
+    setTempMaterials([])
+    setCurrentMaterial({
+      name: '',
+      description: '',
+      quantity: 0,
+      unit: 'unidades',
+      estimated_price: 0,
+    })
+    
+    setFoodForm({
+      shift: 'dia',
+      date: new Date().toISOString().split('T')[0],
+      meal_type: 'almuerzo',
+      unit_cost: 0,
+      total_amount: 0,
+      employee_count: 0,
+      description: '',
+      status: 'pendiente',
+    })
+    setTempEmployees([])
+    setCurrentEmployee({ employee_name: '', employee_id: '' })
+    
+    setPaymentForm({
+      type: 'hora',
+      worker_name: '',
+      worker_id: '',
+      work_description: '',
+      hours: 0,
+      rate_per_hour: 0,
+      total_amount: 0,
+      work_date: new Date().toISOString().split('T')[0],
+      status: 'pendiente',
+    })
+    
+    setEditingItem(null)
+  }
+
+  const openEditModal = (item: any) => {
+    setEditingItem(item)
+    if (activeTab === 'materials') {
+      setMaterialForm(item)
+      setTempMaterials(item.materials || [])
+    } else if (activeTab === 'food') {
+      setFoodForm(item)
+      setTempEmployees(item.employees || [])
+    } else {
+      setPaymentForm(item)
+    }
     setShowAddModal(true)
   }
 
-  // Funciones para manejo de empleados
-  const handleEmployeeToggle = (employeeId: string) => {
-    setSelectedEmployees(prev => 
-      prev.includes(employeeId) 
-        ? prev.filter(id => id !== employeeId)
-        : [...prev, employeeId]
+  const getStatusBadge = (status: string) => {
+    const badges = {
+      pendiente: 'bg-yellow-100 text-yellow-800',
+      aprobado: 'bg-blue-100 text-blue-800',
+      en_proceso: 'bg-purple-100 text-purple-800',
+      completado: 'bg-green-100 text-green-800',
+      rechazado: 'bg-red-100 text-red-800',
+      pagado: 'bg-green-100 text-green-800',
+    }
+    return badges[status as keyof typeof badges] || 'bg-gray-100 text-gray-800'
+  }
+
+  const getPriorityBadge = (priority: string) => {
+    const badges = {
+      baja: 'bg-gray-100 text-gray-800',
+      media: 'bg-blue-100 text-blue-800',
+      alta: 'bg-orange-100 text-orange-800',
+      urgente: 'bg-red-100 text-red-800',
+    }
+    return badges[priority as keyof typeof badges] || 'bg-gray-100 text-gray-800'
+  }
+
+  const filteredMaterials = materialRequests.filter(req =>
+    req.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (selectedStatus === '' || req.status === selectedStatus)
+  )
+
+  const filteredFood = foodTickets.filter(ticket =>
+    ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (selectedStatus === '' || ticket.status === selectedStatus)
+  )
+
+  const filteredPayments = paymentTickets.filter(ticket =>
+    ticket.worker_name.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (selectedStatus === '' || ticket.status === selectedStatus)
+  )
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            </div>
+            </div>
     )
-  }
-
-  const handleSelectAllEmployees = () => {
-    setSelectedEmployees(availableEmployees.map(emp => emp.id))
-  }
-
-  const handleDeselectAllEmployees = () => {
-    setSelectedEmployees([])
-  }
-
-  const getSelectedEmployeesData = () => {
-    return availableEmployees.filter(emp => selectedEmployees.includes(emp.id))
-  }
-
-  // Funciones para pagos masivos
-  const handleTicketSelection = (ticketId: number) => {
-    setSelectedTicketsForPayment(prev => 
-      prev.includes(ticketId) 
-        ? prev.filter(id => id !== ticketId)
-        : [...prev, ticketId]
-    )
-  }
-
-  const handleSelectAllTickets = () => {
-    const pendingTickets = foodTickets.filter(t => t.status === 'aprobado').map(t => t.id)
-    setSelectedTicketsForPayment(pendingTickets)
-  }
-
-  const handleDeselectAllTickets = () => {
-    setSelectedTicketsForPayment([])
-  }
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || [])
-    const validFiles = files.filter(file => {
-      const isValidType = file.type === 'image/jpeg' || file.type === 'image/jpg' || file.type === 'application/pdf'
-      const isValidSize = file.size <= 5 * 1024 * 1024 // 5MB max
-      return isValidType && isValidSize
-    })
-    setPaymentFiles(prev => [...prev, ...validFiles])
-  }
-
-  const handleRemoveFile = (index: number) => {
-    setPaymentFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
-  const handleBulkPayment = () => {
-    if (selectedTicketsForPayment.length === 0) {
-      alert('Selecciona al menos un ticket para pagar')
-      return
-    }
-
-    if (paymentMethod !== 'efectivo' && !paymentReference.trim()) {
-      alert('Ingresa la referencia de pago')
-      return
-    }
-
-    // Procesar pagos
-    const updatedTickets = foodTickets.map(ticket => {
-      if (selectedTicketsForPayment.includes(ticket.id)) {
-        const paymentDocuments = paymentFiles.map((file, index) => ({
-          id: `doc_${Date.now()}_${index}`,
-          name: file.name,
-          type: file.type.startsWith('image/') ? 'image' as const : 'pdf' as const,
-          url: URL.createObjectURL(file),
-          uploadedAt: new Date().toISOString()
-        }))
-
-        return {
-          ...ticket,
-          status: 'pagado' as const,
-          paidDate: new Date().toISOString(),
-          paymentDocuments,
-          paymentReference: paymentReference.trim() || undefined,
-          paymentMethod
-        }
-      }
-      return ticket
-    })
-
-    setFoodTickets(updatedTickets)
-    setShowBulkPaymentModal(false)
-    setSelectedTicketsForPayment([])
-    setPaymentFiles([])
-    setPaymentReference('')
-    setPaymentMethod('efectivo')
-    
-    alert(`Se procesaron ${selectedTicketsForPayment.length} pagos exitosamente`)
-  }
-
-  // Stats
-  const stats = {
-    totalMaterialRequests: materialRequests.length,
-    pendingMaterialRequests: materialRequests.filter(r => r.status === 'pendiente').length,
-    totalFoodTickets: foodTickets.length,
-    pendingFoodTickets: foodTickets.filter(t => t.status === 'pendiente').length,
-    totalPaymentTickets: paymentTickets.length,
-    pendingPaymentTickets: paymentTickets.filter(t => t.status === 'pendiente').length,
-    totalPendingAmount: [
-      ...foodTickets.filter(t => t.status === 'pendiente'),
-      ...paymentTickets.filter(t => t.status === 'pendiente')
-    ].reduce((sum, item) => sum + (item.totalAmount || item.amount || 0), 0)
-  }
-
-  // Filter functions
-  const filteredMaterialRequests = materialRequests.filter(request => {
-    const matchesSearch = request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.requestedBy.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === '' || request.status === selectedStatus
-    return matchesSearch && matchesStatus
-  })
-
-  const filteredFoodTickets = foodTickets.filter(ticket => {
-    const matchesSearch = ticket.employees.some(emp => emp.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         ticket.description.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === '' || ticket.status === selectedStatus
-    return matchesSearch && matchesStatus
-  })
-
-  const filteredPaymentTickets = paymentTickets.filter(ticket => {
-    const matchesSearch = ticket.workerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.workDescription.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = selectedStatus === '' || ticket.status === selectedStatus
-    return matchesSearch && matchesStatus
-  })
-
-  // Helper functions
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pendiente': return 'bg-yellow-100 text-yellow-800'
-      case 'aprobado': return 'bg-blue-100 text-blue-800'
-      case 'en_proceso': return 'bg-orange-100 text-orange-800'
-      case 'completado': return 'bg-green-100 text-green-800'
-      case 'rechazado': return 'bg-red-100 text-red-800'
-      case 'pagado': return 'bg-green-100 text-green-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pendiente': return 'Pendiente'
-      case 'aprobado': return 'Aprobado'
-      case 'en_proceso': return 'En Proceso'
-      case 'completado': return 'Completado'
-      case 'rechazado': return 'Rechazado'
-      case 'pagado': return 'Pagado'
-      default: return status
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'baja': return 'bg-green-100 text-green-800'
-      case 'media': return 'bg-yellow-100 text-yellow-800'
-      case 'alta': return 'bg-orange-100 text-orange-800'
-      case 'urgente': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getPriorityText = (priority: string) => {
-    switch (priority) {
-      case 'baja': return 'Baja'
-      case 'media': return 'Media'
-      case 'alta': return 'Alta'
-      case 'urgente': return 'Urgente'
-      default: return priority
-    }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestión de Solicitudes</h1>
-          <p className="text-gray-600 mt-2">Solicitudes de materiales, tickets de comida y pagos de personal</p>
-        </div>
-        <div className="flex space-x-3">
-          <button 
-            onClick={handleAddClick}
-            className="btn btn-primary"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            Nueva Solicitud
-          </button>
-          {activeTab === 'food' && (
-            <button 
-              onClick={() => setShowBulkPaymentModal(true)}
-              className="btn btn-success"
-            >
-              <CreditCardIcon className="h-5 w-5 mr-2" />
-              Pagos Masivos
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <WrenchScrewdriverIcon className="h-6 w-6 text-blue-600" />
+      <div className="mb-6">
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white shadow-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold mb-1">Gestiones</h1>
+              <p className="text-indigo-100">Administración de solicitudes, vales de comida y pagos</p>
+              {canApprove ? (
+                <div className="mt-2 flex items-center gap-2 text-sm text-green-200">
+                  <ShieldCheckIcon className="h-4 w-4" />
+                  <span>Tienes permisos de aprobación y pago ({user?.role})</span>
             </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Solicitudes Materiales</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalMaterialRequests}</p>
-              <p className="text-xs text-yellow-600">{stats.pendingMaterialRequests} pendientes</p>
+              ) : (
+                <div className="mt-2 flex items-center gap-2 text-sm text-yellow-200">
+                  <ShieldCheckIcon className="h-4 w-4" />
+                  <span>Solo visualización - No puedes aprobar ni pagar ({user?.role})</span>
             </div>
+              )}
           </div>
+            <div className="bg-white/20 backdrop-blur-sm rounded-lg p-3">
+              <ClipboardDocumentListIcon className="h-8 w-8 text-white" />
         </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-green-100 rounded-lg">
-              <ShoppingCartIcon className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Tickets de Comida</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalFoodTickets}</p>
-              <p className="text-xs text-yellow-600">{stats.pendingFoodTickets} pendientes</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <CreditCardIcon className="h-6 w-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pagos de Personal</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.totalPaymentTickets}</p>
-              <p className="text-xs text-yellow-600">{stats.pendingPaymentTickets} pendientes</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card card-hover">
-          <div className="flex items-center">
-            <div className="p-3 bg-orange-100 rounded-lg">
-              <CurrencyDollarIcon className="h-6 w-6 text-orange-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Monto Pendiente</p>
-              <p className="text-2xl font-bold text-gray-900">Q{stats.totalPendingAmount.toFixed(2)}</p>
-              <p className="text-xs text-gray-500">Por aprobar/pagar</p>
-            </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+      <div className="mb-6 border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
           {[
-            { id: 'materials', name: 'Solicitudes de Materiales', icon: WrenchScrewdriverIcon },
-            { id: 'food', name: 'Tickets de Comida', icon: ShoppingCartIcon },
-            { id: 'payments', name: 'Pagos de Personal', icon: CreditCardIcon }
-          ].map((tab) => (
+            { key: 'materials', label: 'Solicitudes de Material', icon: WrenchScrewdriverIcon },
+            { key: 'food', label: 'Vales de Comida', icon: ShoppingCartIcon },
+            { key: 'payments', label: 'Vales de Pago', icon: CreditCardIcon },
+          ].map((tab) => {
+            const Icon = tab.icon
+            return (
             <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`${
-                activeTab === tab.id
-                  ? 'border-emerald-500 text-emerald-600'
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key as any)}
+                className={`
+                  ${activeTab === tab.key
+                    ? 'border-indigo-500 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm flex items-center`}
-            >
-              <tab.icon className="h-5 w-5 mr-2" />
-              {tab.name}
+                  }
+                  group inline-flex items-center py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                `}
+              >
+                <Icon className={`
+                  ${activeTab === tab.key ? 'text-indigo-500' : 'text-gray-400 group-hover:text-gray-500'}
+                  -ml-0.5 mr-2 h-5 w-5
+                `} />
+                {tab.label}
             </button>
-          ))}
+            )
+          })}
         </nav>
       </div>
 
-      {/* Search and Filter */}
-      <div className="card">
-        <div className="flex flex-col lg:flex-row gap-4">
+      {/* Filters and Actions */}
+      <div className="bg-white/80 backdrop-blur-sm rounded-xl shadow-lg border border-white/20 p-4 mb-6">
+        <div className="flex flex-col lg:flex-row gap-3 items-center">
           <div className="flex-1 relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
             <input
               type="text"
-              placeholder="Buscar por título, descripción, empleado..."
+              placeholder="Buscar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="input pl-10"
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             />
           </div>
-          <div className="flex gap-4">
+          <div className="flex gap-2">
             <select 
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="input w-48"
+              className="px-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
             >
               <option value="">Todos los estados</option>
               <option value="pendiente">Pendiente</option>
               <option value="aprobado">Aprobado</option>
-              <option value="en_proceso">En Proceso</option>
-              <option value="completado">Completado</option>
-              <option value="rechazado">Rechazado</option>
-              <option value="pagado">Pagado</option>
+              {activeTab === 'materials' && <option value="en_proceso">En Proceso</option>}
+              {activeTab === 'materials' && <option value="completado">Completado</option>}
+              {activeTab === 'materials' && <option value="rechazado">Rechazado</option>}
+              {(activeTab === 'food' || activeTab === 'payments') && <option value="pagado">Pagado</option>}
             </select>
+                        <button 
+              onClick={() => {
+                resetForms()
+                setShowAddModal(true)
+              }}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-6 py-2.5 rounded-lg hover:from-indigo-700 hover:to-purple-700 flex items-center gap-2 shadow-md hover:shadow-lg transition-all font-semibold"
+            >
+              <PlusIcon className="h-5 w-5" />
+              Nuevo
+                        </button>
           </div>
         </div>
       </div>
 
-      {/* Content based on active tab */}
+      {/* Material Requests Tab */}
       {activeTab === 'materials' && (
-        <div className="card">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Solicitud
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Prioridad
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Costo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Solicitado por
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMaterialRequests.map((request) => (
-                  <tr key={request.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">{request.title}</div>
-                        <div className="text-sm text-gray-500">{request.description}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {request.type === 'herrería' ? (
-                          <WrenchScrewdriverIcon className="h-4 w-4 text-orange-600 mr-2" />
-                        ) : (
-                          <BoltIcon className="h-4 w-4 text-blue-600 mr-2" />
-                        )}
-                        <span className="text-sm text-gray-900 capitalize">{request.type}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(request.priority)}`}>
-                        {getPriorityText(request.priority)}
+        <div className="grid grid-cols-1 gap-4">
+          {filteredMaterials.map((request) => (
+            <div key={request.id} className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 hover:shadow-xl transition-shadow">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-2">
+                    <h3 className="text-lg font-bold text-gray-900">{request.title}</h3>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${request.type === 'herreria' ? 'bg-orange-100 text-orange-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {request.type === 'herreria' ? '🔧 Herrería' : '⚡ Electricidad'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(request.status)}`}>
-                        {getStatusText(request.status)}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityBadge(request.priority)}`}>
+                      {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div>
-                      <div className="font-medium">Q{request.estimatedCost.toFixed(2)}</div>
-                      {request.actualCost && (
-                        <div className="text-xs text-gray-500">Real: Q{request.actualCost.toFixed(2)}</div>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
+                      {request.status.replace('_', ' ').charAt(0).toUpperCase() + request.status.slice(1).replace('_', ' ')}
+                    </span>
+                      </div>
+                  <p className="text-gray-600 text-sm mb-2">{request.description}</p>
+                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <span>👤 {request.requested_by}</span>
+                    <span>📅 {new Date(request.requested_date).toLocaleDateString('es-GT')}</span>
+                    <span>💰 Q{request.estimated_cost.toFixed(2)}</span>
+                  </div>
+                  {request.approved_by && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-green-600 bg-green-50 px-2 py-1 rounded inline-flex">
+                      <ShieldCheckIcon className="h-3 w-3" />
+                      <span>Aprobado por: {request.approved_by}</span>
+                      {request.approved_date && <span>({new Date(request.approved_date).toLocaleDateString('es-GT')})</span>}
+                    </div>
                       )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {request.requestedBy}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
+                <div className="flex gap-2">
+                  {request.status === 'pendiente' && canApprove && (
                         <button 
-                          onClick={() => handleViewItem(request)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors"
-                          title="Ver detalles"
+                      onClick={() => handleApprove('material', request.id!)}
+                      className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title={`Aprobar (como ${user?.username})`}
+                    >
+                      <CheckCircleIcon className="h-5 w-5" />
+                        </button>
+                  )}
+                        <button 
+                    onClick={() => openEditModal(request)}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         >
-                          <EyeIcon className="h-4 w-4" />
+                    <PencilIcon className="h-5 w-5" />
                         </button>
                         <button 
-                          onClick={() => handleEditClick(request)}
-                          className="text-emerald-600 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-50 transition-colors"
-                          title="Editar"
+                    onClick={() => handleDeleteMaterial(request.id!)}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteItem(request.id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                          title="Eliminar"
-                        >
-                          <TrashIcon className="h-4 w-4" />
+                    <TrashIcon className="h-5 w-5" />
                         </button>
                       </div>
-                    </td>
-                  </tr>
+              </div>
+                          </div>
                 ))}
-              </tbody>
-            </table>
-
-            {filteredMaterialRequests.length === 0 && (
+          {filteredMaterials.length === 0 && (
               <div className="text-center py-12">
                 <WrenchScrewdriverIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron solicitudes</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Intenta ajustar los filtros de búsqueda o crea una nueva solicitud.
-                </p>
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay solicitudes</h3>
+              <p className="mt-1 text-sm text-gray-500">Comienza creando una nueva solicitud</p>
               </div>
             )}
-          </div>
         </div>
       )}
 
+      {/* Food Tickets Tab */}
       {activeTab === 'food' && (
-        <div className="card">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    <input
-                      type="checkbox"
-                      checked={selectedTicketsForPayment.length === foodTickets.filter(t => t.status === 'aprobado').length && foodTickets.filter(t => t.status === 'aprobado').length > 0}
-                      onChange={() => {
-                        if (selectedTicketsForPayment.length === foodTickets.filter(t => t.status === 'aprobado').length) {
-                          handleDeselectAllTickets()
-                        } else {
-                          handleSelectAllTickets()
-                        }
-                      }}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                    />
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Empleado
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Turno
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Comida
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredFoodTickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <input
-                        type="checkbox"
-                        checked={selectedTicketsForPayment.includes(ticket.id)}
-                        onChange={() => handleTicketSelection(ticket.id)}
-                        disabled={ticket.status !== 'aprobado'}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50"
-                      />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {ticket.employees.length} empleado{ticket.employees.length !== 1 ? 's' : ''}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {ticket.employees.map(emp => emp.name).join(', ')}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        ticket.shift === 'día' ? 'bg-yellow-100 text-yellow-800' : 'bg-indigo-100 text-indigo-800'
-                      }`}>
-                        {ticket.shift === 'día' ? 'Día' : 'Noche'}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredFood.map((ticket) => (
+            <div key={ticket.id} className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 hover:shadow-xl transition-shadow">
+              <div className="flex items-start justify-between mb-3">
+                  <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${ticket.shift === 'dia' ? 'bg-yellow-100 text-yellow-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                      {ticket.shift === 'dia' ? '☀️ Día' : '🌙 Noche'}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900 capitalize">{ticket.mealType}</div>
-                      <div className="text-sm text-gray-500">{ticket.description}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="font-medium">Q{ticket.totalAmount.toFixed(2)}</div>
-                      <div className="text-xs text-gray-500">
-                        Q{ticket.unitCost.toFixed(2)} × {ticket.employeeCount}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                        {getStatusText(ticket.status)}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(ticket.status)}`}>
+                      {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(ticket.date).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button 
-                          onClick={() => handleViewItem(ticket)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors"
-                          title="Ver detalles"
-                        >
-                          <EyeIcon className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleEditClick(ticket)}
-                          className="text-emerald-600 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-50 transition-colors"
-                          title="Editar"
-                        >
-                          <PencilIcon className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteItem(ticket.id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                          title="Eliminar"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filteredFoodTickets.length === 0 && (
-              <div className="text-center py-12">
-                <ShoppingCartIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron tickets de comida</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Intenta ajustar los filtros de búsqueda o crea un nuevo ticket.
-                </p>
+                  <h4 className="font-semibold text-gray-900 capitalize">{ticket.meal_type}</h4>
+                  <p className="text-sm text-gray-600">📅 {new Date(ticket.date).toLocaleDateString('es-GT')}</p>
+                      </div>
+                      </div>
+              <div className="space-y-2 mb-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Empleados:</span>
+                  <span className="font-semibold">{ticket.employee_count}</span>
+                      </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Costo unitario:</span>
+                  <span className="font-semibold">Q{ticket.unit_cost.toFixed(2)}</span>
               </div>
-            )}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Total:</span>
+                  <span className="font-bold text-lg">Q{ticket.total_amount.toFixed(2)}</span>
           </div>
+              </div>
+              {ticket.approved_by && (
+                <div className="mt-2 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                  ✅ Aprobado por: {ticket.approved_by}
+                  {ticket.approved_date && ` (${new Date(ticket.approved_date).toLocaleDateString('es-GT')})`}
         </div>
       )}
-
-      {activeTab === 'payments' && (
-        <div className="card">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Trabajador
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Trabajo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredPaymentTickets.map((ticket) => (
-                  <tr key={ticket.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{ticket.workerName}</div>
-                      {ticket.workerId && (
-                        <div className="text-sm text-gray-500">ID: {ticket.workerId}</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        ticket.type === 'hora' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                      }`}>
-                        {ticket.type === 'hora' ? 'Por Hora' : 'Por Día'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{ticket.workDescription}</div>
-                      <div className="text-sm text-gray-500">
-                        {ticket.type === 'hora' 
-                          ? `${ticket.hours} horas @ Q${ticket.ratePerHour}/h`
-                          : `${ticket.days} días @ Q${ticket.ratePerDay}/día`
-                        }
+              {ticket.status === 'pagado' && ticket.payment_reference && (
+                <div className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  💰 Ref. pago: {ticket.payment_reference}
+                  {ticket.paid_date && ` (${new Date(ticket.paid_date).toLocaleDateString('es-GT')})`}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      <div className="font-medium">Q{ticket.totalAmount.toFixed(2)}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                        {getStatusText(ticket.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {new Date(ticket.workDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
+              )}
+              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                {ticket.status === 'pendiente' && canApprove && (
                         <button 
-                          onClick={() => handleViewItem(ticket)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded-md hover:bg-blue-50 transition-colors"
-                          title="Ver detalles"
-                        >
-                          <EyeIcon className="h-4 w-4" />
+                    onClick={() => handleApprove('food', ticket.id!)}
+                    className="py-2 px-3 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm"
+                    title={`Aprobar (como ${user?.username})`}
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
                         </button>
+                )}
+                {ticket.status === 'aprobado' && canApprove && (
                         <button 
-                          onClick={() => handleEditClick(ticket)}
-                          className="text-emerald-600 hover:text-emerald-900 p-1 rounded-md hover:bg-emerald-50 transition-colors"
-                          title="Editar"
-                        >
-                          <PencilIcon className="h-4 w-4" />
+                    onClick={() => handlePay('food', ticket.id!)}
+                    className="py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm"
+                    title="Registrar Pago"
+                  >
+                    <BanknotesIcon className="h-4 w-4" />
                         </button>
+                )}
                         <button 
-                          onClick={() => handleDeleteItem(ticket.id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded-md hover:bg-red-50 transition-colors"
-                          title="Eliminar"
+                  onClick={() => openEditModal(ticket)}
+                  className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
                         >
-                          <TrashIcon className="h-4 w-4" />
+                  Editar
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {filteredPaymentTickets.length === 0 && (
-              <div className="text-center py-12">
-                <CreditCardIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No se encontraron pagos de personal</h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  Intenta ajustar los filtros de búsqueda o crea un nuevo pago.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* View Modal */}
-      {showViewModal && selectedItem && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">Detalles</h3>
                 <button 
-                  onClick={() => setShowViewModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  onClick={() => handleDeleteFood(ticket.id!)}
+                  className="py-2 px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
                 >
-                  <XMarkIcon className="h-6 w-6" />
+                  <TrashIcon className="h-4 w-4" />
                 </button>
               </div>
-              
-              <div className="space-y-4">
-                {modalType === 'material' && (
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">{selectedItem.title}</h4>
-                    <p className="text-gray-600 mb-4">{selectedItem.description}</p>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Tipo</label>
-                        <p className="text-sm text-gray-900 capitalize">{selectedItem.type}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Prioridad</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getPriorityColor(selectedItem.priority)}`}>
-                          {getPriorityText(selectedItem.priority)}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Estado</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedItem.status)}`}>
-                          {getStatusText(selectedItem.status)}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Solicitado por</label>
-                        <p className="text-sm text-gray-900">{selectedItem.requestedBy}</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-500">Materiales</label>
-                      <div className="mt-2 space-y-2">
-                        {selectedItem.materials.map((material: Material) => (
-                          <div key={material.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                            <div>
-                              <span className="font-medium">{material.name}</span>
-                              <span className="text-sm text-gray-500 ml-2">({material.quantity} {material.unit})</span>
-                            </div>
-                            <span className="font-medium">Q{material.estimatedPrice.toFixed(2)}</span>
                           </div>
                         ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Costo Estimado</label>
-                        <p className="text-lg font-semibold text-gray-900">Q{selectedItem.estimatedCost.toFixed(2)}</p>
-                      </div>
-                      {selectedItem.actualCost && (
-                        <div>
-                          <label className="text-sm font-medium text-gray-500">Costo Real</label>
-                          <p className="text-lg font-semibold text-gray-900">Q{selectedItem.actualCost.toFixed(2)}</p>
+          {filteredFood.length === 0 && (
+            <div className="col-span-full text-center py-12">
+              <ShoppingCartIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay vales de comida</h3>
+              <p className="mt-1 text-sm text-gray-500">Comienza creando un nuevo vale</p>
                         </div>
                       )}
-                    </div>
                   </div>
                 )}
 
-                {modalType === 'food' && (
+      {/* Payment Tickets Tab */}
+      {activeTab === 'payments' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredPayments.map((ticket) => (
+            <div key={ticket.id} className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 hover:shadow-xl transition-shadow">
+              <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Ticket de Comida</h4>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Empleados</label>
-                        <p className="text-sm text-gray-900">
-                          {selectedItem.employees.length} empleado{selectedItem.employees.length !== 1 ? 's' : ''}
-                        </p>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {selectedItem.employees.map(emp => emp.name).join(', ')}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Turno</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          selectedItem.shift === 'día' ? 'bg-yellow-100 text-yellow-800' : 'bg-indigo-100 text-indigo-800'
-                        }`}>
-                          {selectedItem.shift === 'día' ? 'Día' : 'Noche'}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${ticket.type === 'hora' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                      {ticket.type === 'hora' ? '⏱️ Por Hora' : '📅 Por Día'}
+                        </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusBadge(ticket.status)}`}>
+                      {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
                         </span>
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Tipo de Comida</label>
-                        <p className="text-sm text-gray-900 capitalize">{selectedItem.mealType}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Estado</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedItem.status)}`}>
-                          {getStatusText(selectedItem.status)}
-                        </span>
-                      </div>
+                  <h4 className="font-semibold text-gray-900">{ticket.worker_name}</h4>
+                  <p className="text-sm text-gray-600">📅 {new Date(ticket.work_date).toLocaleDateString('es-GT')}</p>
                     </div>
-
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-500">Descripción</label>
-                      <p className="text-sm text-gray-900">{selectedItem.description}</p>
                     </div>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Costo Unitario</label>
-                        <p className="text-sm font-semibold text-gray-900">Q{selectedItem.unitCost.toFixed(2)}</p>
+              <div className="space-y-2 mb-3">
+                <p className="text-sm text-gray-600 line-clamp-2">{ticket.work_description}</p>
+                {ticket.type === 'hora' && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Horas:</span>
+                    <span className="font-semibold">{ticket.hours} h × Q{ticket.rate_per_hour?.toFixed(2)}</span>
                       </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Cantidad</label>
-                        <p className="text-sm font-semibold text-gray-900">{selectedItem.employeeCount} empleado{selectedItem.employeeCount !== 1 ? 's' : ''}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Total</label>
-                        <p className="text-lg font-semibold text-gray-900">Q{selectedItem.totalAmount.toFixed(2)}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-4">
-                      <label className="text-sm font-medium text-gray-500">Fecha</label>
-                      <p className="text-sm text-gray-900">{new Date(selectedItem.date).toLocaleDateString()}</p>
-                    </div>
-
-                    {/* Información de pago */}
-                    {selectedItem.status === 'pagado' && (
-                      <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-green-900 mb-2">Información de Pago</h5>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-green-700">Método:</span>
-                            <span className="ml-2 text-green-900 capitalize">{selectedItem.paymentMethod}</span>
-                          </div>
-                          {selectedItem.paymentReference && (
-                            <div>
-                              <span className="text-green-700">Referencia:</span>
-                              <span className="ml-2 text-green-900">{selectedItem.paymentReference}</span>
+                )}
+                {ticket.type === 'dia' && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Días:</span>
+                    <span className="font-semibold">{ticket.days} d × Q{ticket.rate_per_day?.toFixed(2)}</span>
                             </div>
                           )}
-                          <div>
-                            <span className="text-green-700">Fecha de Pago:</span>
-                            <span className="ml-2 text-green-900">
-                              {selectedItem.paidDate ? new Date(selectedItem.paidDate).toLocaleDateString() : 'N/A'}
-                            </span>
+                <div className="flex items-center justify-between text-sm pt-2 border-t">
+                  <span className="text-gray-600">Total:</span>
+                  <span className="font-bold text-lg">Q{ticket.total_amount.toFixed(2)}</span>
                           </div>
                         </div>
-                        
-                        {/* Documentos de pago */}
-                        {selectedItem.paymentDocuments && selectedItem.paymentDocuments.length > 0 && (
-                          <div className="mt-3">
-                            <span className="text-green-700 text-sm font-medium">Documentos:</span>
-                            <div className="mt-2 space-y-1">
-                              {selectedItem.paymentDocuments.map((doc, index) => (
-                                <div key={index} className="flex items-center text-sm">
-                                  <span className="text-green-900">{doc.name}</span>
-                                  <span className="ml-2 text-green-600 text-xs">
-                                    ({doc.type === 'image' ? 'Imagen' : 'PDF'})
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
+              {ticket.approved_by && (
+                <div className="mt-2 text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
+                  ✅ Aprobado por: {ticket.approved_by}
+                  {ticket.approved_date && ` (${new Date(ticket.approved_date).toLocaleDateString('es-GT')})`}
                           </div>
                         )}
+              {ticket.status === 'pagado' && ticket.payment_reference && (
+                <div className="mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                  💰 Ref. pago: {ticket.payment_reference}
+                  {ticket.paid_date && ` (${new Date(ticket.paid_date).toLocaleDateString('es-GT')})`}
                       </div>
                     )}
+              <div className="flex gap-2 pt-3 border-t border-gray-200">
+                {ticket.status === 'pendiente' && canApprove && (
+                  <button 
+                    onClick={() => handleApprove('payment', ticket.id!)}
+                    className="py-2 px-3 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors text-sm"
+                    title={`Aprobar (como ${user?.username})`}
+                  >
+                    <CheckCircleIcon className="h-4 w-4" />
+                  </button>
+                )}
+                {ticket.status === 'aprobado' && canApprove && (
+                  <button
+                    onClick={() => handlePay('payment', ticket.id!)}
+                    className="py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm"
+                    title="Registrar Pago"
+                  >
+                    <BanknotesIcon className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  onClick={() => openEditModal(ticket)}
+                  className="flex-1 py-2 px-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => handleDeletePayment(ticket.id!)}
+                  className="py-2 px-3 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+                      </div>
+                      </div>
+          ))}
+          {filteredPayments.length === 0 && (
+            <div className="col-span-full text-center py-12">
+              <CreditCardIcon className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">No hay vales de pago</h3>
+              <p className="mt-1 text-sm text-gray-500">Comienza creando un nuevo vale</p>
                   </div>
                 )}
-
-                {modalType === 'payment' && (
-                  <div>
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Pago de Personal</h4>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Trabajador</label>
-                        <p className="text-sm text-gray-900">{selectedItem.workerName}</p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Tipo</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          selectedItem.type === 'hora' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
-                        }`}>
-                          {selectedItem.type === 'hora' ? 'Por Hora' : 'Por Día'}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Estado</label>
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(selectedItem.status)}`}>
-                          {getStatusText(selectedItem.status)}
-                        </span>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Fecha de Trabajo</label>
-                        <p className="text-sm text-gray-900">{new Date(selectedItem.workDate).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-
-                    <div className="mb-4">
-                      <label className="text-sm font-medium text-gray-500">Descripción del Trabajo</label>
-                      <p className="text-sm text-gray-900">{selectedItem.workDescription}</p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Detalles</label>
-                        <p className="text-sm text-gray-900">
-                          {selectedItem.type === 'hora' 
-                            ? `${selectedItem.hours} horas @ Q${selectedItem.ratePerHour}/h`
-                            : `${selectedItem.days} días @ Q${selectedItem.ratePerDay}/día`
-                          }
-                        </p>
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium text-gray-500">Total</label>
-                        <p className="text-lg font-semibold text-gray-900">Q{selectedItem.totalAmount.toFixed(2)}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
-      {/* Add Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {modalType === 'material' ? 'Nueva Solicitud de Materiales' : 
-                   modalType === 'food' ? 'Nuevo Ticket de Comida' : 
-                   'Nuevo Pago de Personal'}
-                </h3>
-                <button 
-                  onClick={() => setShowAddModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+      {/* Modal Solicitud de Material */}
+      {showAddModal && activeTab === 'materials' && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-orange-600 to-red-600 p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-bold">
+                {editingItem ? 'Editar' : 'Nueva'} Solicitud de Material
+              </h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <form onSubmit={(e) => {
-                e.preventDefault()
-                const formData = new FormData(e.target as HTMLFormElement)
-                const data = Object.fromEntries(formData.entries())
-                handleAddItem(data)
-              }}>
-                <div className="space-y-4">
-                  {modalType === 'material' && (
-                    <>
+            <form onSubmit={handleSaveMaterialRequest} className="p-6 space-y-6">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Tipo</label>
-                          <select name="type" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="herrería">Herrería</option>
-                            <option value="electricidad">Electricidad</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <WrenchScrewdriverIcon className="h-4 w-4" />
+                    Tipo *
+                  </label>
+                  <select
+                    required
+                    value={materialForm.type}
+                    onChange={(e) => setMaterialForm({ ...materialForm, type: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="herreria">🔧 Herrería</option>
+                    <option value="electricidad">⚡ Electricidad</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Prioridad</label>
-                          <select name="priority" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <FireIcon className="h-4 w-4" />
+                    Prioridad *
+                  </label>
+                  <select
+                    required
+                    value={materialForm.priority}
+                    onChange={(e) => setMaterialForm({ ...materialForm, priority: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
                             <option value="baja">Baja</option>
                             <option value="media">Media</option>
                             <option value="alta">Alta</option>
+                    <option value="urgente">Urgente</option>
                           </select>
                         </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Título</label>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <DocumentTextIcon className="h-4 w-4" />
+                    Título *
+                  </label>
                         <input 
                           type="text" 
-                          name="title" 
                           required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    value={materialForm.title}
+                    onChange={(e) => setMaterialForm({ ...materialForm, title: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Ej: Reparación de portón principal"
                         />
                       </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Descripción</label>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <ClipboardDocumentListIcon className="h-4 w-4" />
+                    Descripción *
+                  </label>
                         <textarea 
-                          name="description" 
-                          rows={3}
                           required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    value={materialForm.description}
+                    onChange={(e) => setMaterialForm({ ...materialForm, description: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    rows={3}
                         />
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Solicitado por</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <UserIcon className="h-4 w-4" />
+                    Solicitado por *
+                  </label>
                         <input 
                           type="text" 
-                          name="requestedBy" 
                           required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    value={materialForm.requested_by}
+                    onChange={(e) => setMaterialForm({ ...materialForm, requested_by: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         />
                       </div>
-                      
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Costo Estimado (Q)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <CalendarDaysIcon className="h-4 w-4" />
+                    Fecha de Solicitud *
+                  </label>
                         <input 
-                          type="number" 
-                          name="estimatedCost" 
-                          step="0.01"
+                    type="date"
                           required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    value={materialForm.requested_date}
+                    onChange={(e) => setMaterialForm({ ...materialForm, requested_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                         />
                       </div>
-                    </>
-                  )}
+              </div>
 
-                  {modalType === 'food' && (
-                    <>
-                      {/* Selección de Empleados */}
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Seleccionar Empleados ({selectedEmployees.length} seleccionados)
-                          </label>
-                          <div className="flex space-x-2">
-                            <button
-                              type="button"
-                              onClick={handleSelectAllEmployees}
-                              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                            >
-                              Seleccionar Todos
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleDeselectAllEmployees}
-                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                            >
-                              Limpiar
-                            </button>
+              {/* Materiales */}
+              <div className="border-t pt-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <CubeIcon className="h-5 w-5" />
+                  Materiales Requeridos
+                </h3>
+                
+                <div className="grid grid-cols-6 gap-3 mb-3 bg-gray-50 p-3 rounded-lg">
+                  <div className="col-span-2">
+                    <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                      <CubeIcon className="h-3 w-3" />
+                      Material
                           </div>
-                        </div>
-                        <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
-                          <div className="grid grid-cols-1 gap-2">
-                            {availableEmployees.map((employee) => (
-                              <label key={employee.id} className="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
                                 <input
-                                  type="checkbox"
-                                  checked={selectedEmployees.includes(employee.id)}
-                                  onChange={() => handleEmployeeToggle(employee.id)}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <div className="flex-1">
-                                  <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                                  <div className="text-xs text-gray-500">ID: {employee.employeeId}</div>
+                      type="text"
+                      placeholder="Nombre del material"
+                      value={currentMaterial.name}
+                      onChange={(e) => setCurrentMaterial({ ...currentMaterial, name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    />
                                 </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Turno</label>
-                          <select name="shift" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="día">Día</option>
-                            <option value="noche">Noche</option>
-                          </select>
+                    <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                      <ScaleIcon className="h-3 w-3" />
+                      Cantidad
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Tipo de Comida</label>
-                          <select name="mealType" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="desayuno">Desayuno</option>
-                            <option value="almuerzo">Almuerzo</option>
-                            <option value="cena">Cena</option>
-                            <option value="refrigerio">Refrigerio</option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Descripción</label>
-                        <textarea 
-                          name="description" 
-                          rows={3}
-                          required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Costo Unitario (Q)</label>
                           <input 
                             type="number" 
-                            name="unitCost" 
+                      placeholder="0"
+                      min="0"
                             step="0.01"
-                            required 
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0.00"
+                      value={currentMaterial.quantity}
+                      onChange={(e) => setCurrentMaterial({ ...currentMaterial, quantity: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Total Calculado</label>
-                          <div className="mt-1 p-2 bg-gray-100 border border-gray-300 rounded-md text-sm">
-                            <div className="font-medium text-gray-900">
-                              Q{((parseFloat(document.querySelector('input[name="unitCost"]')?.value || '0') || 0) * selectedEmployees.length).toFixed(2)}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {selectedEmployees.length} empleado{selectedEmployees.length !== 1 ? 's' : ''} seleccionado{selectedEmployees.length !== 1 ? 's' : ''}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Fecha</label>
-                        <input 
-                          type="date" 
-                          name="date" 
-                          required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {modalType === 'payment' && (
-                    <>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Trabajador</label>
+                    <div className="text-xs text-gray-600 mb-1">Unidad</div>
                           <input 
                             type="text" 
-                            name="workerName" 
-                            required 
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="ej: kg"
+                      value={currentMaterial.unit}
+                      onChange={(e) => setCurrentMaterial({ ...currentMaterial, unit: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Tipo</label>
-                          <select name="type" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="hora">Por Hora</option>
-                            <option value="día">Por Día</option>
-                          </select>
+                    <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                      <CurrencyDollarIcon className="h-3 w-3" />
+                      Precio
+                        </div>
+                          <input 
+                            type="number" 
+                      placeholder="0.00"
+                      min="0"
+                      step="0.01"
+                      value={currentMaterial.estimated_price}
+                      onChange={(e) => setCurrentMaterial({ ...currentMaterial, estimated_price: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                          />
+                        </div>
+                        <div>
+                    <div className="text-xs text-gray-600 mb-1">Agregar</div>
+                    <button
+                      type="button"
+                      onClick={addMaterial}
+                      className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center justify-center gap-1"
+                    >
+                      <PlusIcon className="h-4 w-4" />
+                    </button>
                         </div>
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Descripción del Trabajo</label>
-                        <textarea 
-                          name="workDescription" 
-                          rows={3}
-                          required 
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Fecha de Trabajo</label>
-                          <input 
-                            type="date" 
-                            name="workDate" 
-                            required 
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                          />
+                {tempMaterials.length > 0 && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b">
+                          <th className="text-left pb-2">Material</th>
+                          <th className="text-left pb-2">Cantidad</th>
+                          <th className="text-left pb-2">Precio Unit.</th>
+                          <th className="text-left pb-2">Total</th>
+                          <th className="text-left pb-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tempMaterials.map((material, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="py-2">{material.name}</td>
+                            <td className="py-2">{material.quantity} {material.unit}</td>
+                            <td className="py-2">Q{material.estimated_price.toFixed(2)}</td>
+                            <td className="py-2 font-semibold">Q{(material.quantity * material.estimated_price).toFixed(2)}</td>
+                            <td className="py-2">
+                              <button
+                                type="button"
+                                onClick={() => removeMaterial(index)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <TrashIcon className="h-4 w-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="font-bold">
+                          <td colSpan={3} className="pt-2 text-right">Total Estimado:</td>
+                          <td className="pt-2">Q{tempMaterials.reduce((sum, m) => sum + (m.quantity * m.estimated_price), 0).toFixed(2)}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Estado</label>
-                          <select name="status" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="pendiente">Pendiente</option>
-                            <option value="aprobado">Aprobado</option>
-                            <option value="rechazado">Rechazado</option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Horas</label>
-                          <input 
-                            type="number" 
-                            name="hours" 
-                            step="0.5"
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Tarifa por Hora (Q)</label>
-                          <input 
-                            type="number" 
-                            name="ratePerHour" 
-                            step="0.01"
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Días</label>
-                          <input 
-                            type="number" 
-                            name="days" 
-                            step="0.5"
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700">Tarifa por Día (Q)</label>
-                          <input 
-                            type="number" 
-                            name="ratePerDay" 
-                            step="0.01"
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                          />
-                        </div>
-                      </div>
-                    </>
                   )}
                 </div>
                 
-                <div className="mt-6 flex justify-end space-x-3">
+              <div className="flex gap-3">
                   <button
                     type="button"
                     onClick={() => setShowAddModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:from-orange-700 hover:to-red-700 font-medium"
                   >
-                    Crear
+                  {editingItem ? 'Actualizar' : 'Crear'} Solicitud
                   </button>
                 </div>
               </form>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Edit Modal */}
-      {showEditModal && editingItem && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-medium text-gray-900">
-                  {modalType === 'material' ? 'Editar Solicitud de Materiales' : 
-                   modalType === 'food' ? 'Editar Ticket de Comida' : 
-                   'Editar Pago de Personal'}
-                </h3>
-                <button 
-                  onClick={() => setShowEditModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+      {/* Modal Vale de Comida */}
+      {showAddModal && activeTab === 'food' && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-bold">
+                {editingItem ? 'Editar' : 'Nuevo'} Vale de Comida
+              </h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
               
-              <form onSubmit={(e) => {
-                e.preventDefault()
-                const formData = new FormData(e.target as HTMLFormElement)
-                const data = Object.fromEntries(formData.entries())
-                handleEditItem(data)
-              }}>
-                <div className="space-y-4">
-                  {modalType === 'food' && (
-                    <>
-                      {/* Selección de Empleados */}
+            <form onSubmit={handleSaveFoodTicket} className="p-6 space-y-6">
+              <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <label className="block text-sm font-medium text-gray-700">
-                            Seleccionar Empleados ({selectedEmployees.length} seleccionados)
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <ClockIcon className="h-4 w-4" />
+                    Turno *
                           </label>
-                          <div className="flex space-x-2">
-                            <button
-                              type="button"
-                              onClick={handleSelectAllEmployees}
-                              className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                            >
-                              Seleccionar Todos
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleDeselectAllEmployees}
-                              className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                            >
-                              Limpiar
-                            </button>
+                  <select
+                    required
+                    value={foodForm.shift}
+                    onChange={(e) => setFoodForm({ ...foodForm, shift: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="dia">☀️ Día</option>
+                    <option value="noche">🌙 Noche</option>
+                  </select>
                           </div>
-                        </div>
-                        <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
-                          <div className="grid grid-cols-1 gap-2">
-                            {availableEmployees.map((employee) => (
-                              <label key={employee.id} className="flex items-center space-x-3 cursor-pointer hover:bg-gray-100 p-2 rounded">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <CalendarDaysIcon className="h-4 w-4" />
+                    Fecha *
+                  </label>
                                 <input
-                                  type="checkbox"
-                                  checked={selectedEmployees.includes(employee.id)}
-                                  onChange={() => handleEmployeeToggle(employee.id)}
-                                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                                />
-                                <div className="flex-1">
-                                  <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                                  <div className="text-xs text-gray-500">ID: {employee.employeeId}</div>
+                    type="date"
+                    required
+                    value={foodForm.date}
+                    onChange={(e) => setFoodForm({ ...foodForm, date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  />
                                 </div>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Turno</label>
-                          <select name="shift" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="día" selected={editingItem.shift === 'día'}>Día</option>
-                            <option value="noche" selected={editingItem.shift === 'noche'}>Noche</option>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <ShoppingCartIcon className="h-4 w-4" />
+                    Tipo de Comida *
+                  </label>
+                  <select
+                    required
+                    value={foodForm.meal_type}
+                    onChange={(e) => setFoodForm({ ...foodForm, meal_type: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="desayuno">🌅 Desayuno</option>
+                    <option value="almuerzo">🍽️ Almuerzo</option>
+                    <option value="cena">🌙 Cena</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Tipo de Comida</label>
-                          <select name="mealType" required className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
-                            <option value="desayuno" selected={editingItem.mealType === 'desayuno'}>Desayuno</option>
-                            <option value="almuerzo" selected={editingItem.mealType === 'almuerzo'}>Almuerzo</option>
-                            <option value="cena" selected={editingItem.mealType === 'cena'}>Cena</option>
-                            <option value="refrigerio" selected={editingItem.mealType === 'refrigerio'}>Refrigerio</option>
-                          </select>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <CurrencyDollarIcon className="h-4 w-4" />
+                    Costo Unitario *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    step="0.01"
+                    value={foodForm.unit_cost}
+                    onChange={(e) => setFoodForm({ ...foodForm, unit_cost: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    placeholder="Ej: 25.00"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <DocumentTextIcon className="h-4 w-4" />
+                    Descripción
+                  </label>
+                  <textarea
+                    value={foodForm.description}
+                    onChange={(e) => setFoodForm({ ...foodForm, description: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    rows={2}
+                  />
                         </div>
                       </div>
                       
+              {/* Empleados */}
+              <div className="border-t pt-6">
+                <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                  <UserIcon className="h-5 w-5" />
+                  Empleados
+                </h3>
+                
+                <div className="grid grid-cols-3 gap-3 mb-3 bg-gray-50 p-3 rounded-lg">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Descripción</label>
-                        <textarea 
-                          name="description" 
-                          rows={3}
-                          required 
-                          defaultValue={editingItem.description}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    <div className="text-xs text-gray-600 mb-1 flex items-center gap-1">
+                      <UserIcon className="h-3 w-3" />
+                      Nombre
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Nombre del empleado"
+                      value={currentEmployee.employee_name}
+                      onChange={(e) => setCurrentEmployee({ ...currentEmployee, employee_name: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         />
                       </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Costo Unitario (Q)</label>
+                    <div className="text-xs text-gray-600 mb-1">ID (opcional)</div>
                           <input 
-                            type="number" 
-                            name="unitCost" 
-                            step="0.01"
-                            required 
-                            defaultValue={editingItem.unitCost}
-                            className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0.00"
+                      type="text"
+                      placeholder="ID (opcional)"
+                      value={currentEmployee.employee_id}
+                      onChange={(e) => setCurrentEmployee({ ...currentEmployee, employee_id: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700">Total Calculado</label>
-                          <div className="mt-1 p-2 bg-gray-100 border border-gray-300 rounded-md text-sm">
-                            <div className="font-medium text-gray-900">
-                              Q{((parseFloat(document.querySelector('input[name="unitCost"]')?.value || '0') || 0) * selectedEmployees.length).toFixed(2)}
+                    <div className="text-xs text-gray-600 mb-1">Agregar</div>
+                    <button
+                      type="button"
+                      onClick={addEmployee}
+                      className="w-full px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                      <UserPlusIcon className="h-4 w-4" />
+                    </button>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {selectedEmployees.length} empleado{selectedEmployees.length !== 1 ? 's' : ''} seleccionado{selectedEmployees.length !== 1 ? 's' : ''}
                             </div>
+
+                {tempEmployees.length > 0 && (
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <p className="text-sm text-gray-600 mb-2">Empleados agregados: {tempEmployees.length}</p>
+                    <div className="space-y-2">
+                      {tempEmployees.map((emp, index) => (
+                        <div key={index} className="flex items-center justify-between bg-white p-2 rounded">
+                          <span className="text-sm">{emp.employee_name} {emp.employee_id && `(${emp.employee_id})`}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeEmployee(index)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
                           </div>
+                      ))}
                         </div>
+                    <div className="mt-3 pt-3 border-t flex justify-between items-center">
+                      <span className="font-semibold">Total:</span>
+                      <span className="text-lg font-bold text-green-600">
+                        {tempEmployees.length} empleados × Q{foodForm.unit_cost.toFixed(2)} = Q{(tempEmployees.length * foodForm.unit_cost).toFixed(2)}
+                      </span>
                       </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Fecha</label>
-                        <input 
-                          type="date" 
-                          name="date" 
-                          required 
-                          defaultValue={editingItem.date}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        />
                       </div>
-                    </>
                   )}
                 </div>
                 
-                <div className="mt-6 flex justify-end space-x-3">
+              <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setShowEditModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 font-medium"
                   >
-                    Actualizar
+                  {editingItem ? 'Actualizar' : 'Crear'} Vale
                   </button>
                 </div>
               </form>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Bulk Payment Modal */}
-      {showBulkPaymentModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 xl:w-2/5 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center">
-                  <CreditCardIcon className="h-6 w-6 text-green-600 mr-3" />
-                  <h3 className="text-lg font-medium text-gray-900">Pagos Masivos - Tickets de Comida</h3>
-                </div>
-                <button 
-                  onClick={() => setShowBulkPaymentModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
+      {/* Modal Vale de Pago */}
+      {showAddModal && activeTab === 'payments' && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-bold">
+                {editingItem ? 'Editar' : 'Nuevo'} Vale de Pago
+              </h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white/20 rounded-lg">
                   <XMarkIcon className="h-6 w-6" />
                 </button>
               </div>
 
-              {/* Resumen de selección */}
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center justify-between">
+            <form onSubmit={handleSavePaymentTicket} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm font-medium text-blue-900">
-                      {selectedTicketsForPayment.length} ticket{selectedTicketsForPayment.length !== 1 ? 's' : ''} seleccionado{selectedTicketsForPayment.length !== 1 ? 's' : ''}
-                    </p>
-                    <p className="text-xs text-blue-700">
-                      Total: Q{selectedTicketsForPayment.reduce((sum, id) => {
-                        const ticket = foodTickets.find(t => t.id === id)
-                        return sum + (ticket?.totalAmount || 0)
-                      }, 0).toFixed(2)}
-                    </p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <CreditCardIcon className="h-4 w-4" />
+                    Tipo de Pago *
+                  </label>
+                  <select
+                    required
+                    value={paymentForm.type}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, type: e.target.value as any })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="hora">⏱️ Por Hora</option>
+                    <option value="dia">📅 Por Día</option>
+                  </select>
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={handleSelectAllTickets}
-                      className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-                    >
-                      Seleccionar Todos
-                    </button>
-                    <button
-                      onClick={handleDeselectAllTickets}
-                      className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                    >
-                      Limpiar
-                    </button>
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <CalendarDaysIcon className="h-4 w-4" />
+                    Fecha de Trabajo *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentForm.work_date}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, work_date: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
                 </div>
-              </div>
-
-              {/* Lista de tickets seleccionados */}
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-700 mb-3">Tickets Seleccionados</h4>
-                <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md">
-                  {selectedTicketsForPayment.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500">
-                      No hay tickets seleccionados
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-gray-200">
-                      {selectedTicketsForPayment.map(ticketId => {
-                        const ticket = foodTickets.find(t => t.id === ticketId)
-                        if (!ticket) return null
-                        return (
-                          <div key={ticketId} className="p-3 flex items-center justify-between">
                             <div>
-                              <div className="text-sm font-medium text-gray-900">
-                                {ticket.employees.length} empleado{ticket.employees.length !== 1 ? 's' : ''} - {ticket.mealType}
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                {ticket.employees.map(emp => emp.name).join(', ')}
-                              </div>
-                            </div>
-                            <div className="text-sm font-medium text-gray-900">
-                              Q{ticket.totalAmount.toFixed(2)}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Método de pago */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-3">Método de Pago</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { value: 'efectivo', label: 'Efectivo', icon: '💵' },
-                    { value: 'transferencia', label: 'Transferencia', icon: '🏦' },
-                    { value: 'cheque', label: 'Cheque', icon: '📄' }
-                  ].map((method) => (
-                    <label key={method.value} className="relative">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value={method.value}
-                        checked={paymentMethod === method.value}
-                        onChange={(e) => setPaymentMethod(e.target.value as any)}
-                        className="sr-only"
-                      />
-                      <div className={`p-3 border rounded-lg cursor-pointer text-center transition-colors ${
-                        paymentMethod === method.value 
-                          ? 'border-green-500 bg-green-50 text-green-700' 
-                          : 'border-gray-300 hover:border-gray-400'
-                      }`}>
-                        <div className="text-2xl mb-1">{method.icon}</div>
-                        <div className="text-sm font-medium">{method.label}</div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Referencia de pago */}
-              {paymentMethod !== 'efectivo' && (
-                <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Referencia de Pago
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <UserIcon className="h-4 w-4" />
+                    Nombre del Trabajador *
                   </label>
                   <input
                     type="text"
-                    value={paymentReference}
-                    onChange={(e) => setPaymentReference(e.target.value)}
-                    placeholder="Número de transacción, cheque, etc."
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500"
+                    required
+                    value={paymentForm.worker_name}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, worker_name: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div>
-              )}
-
-              {/* Carga de documentos */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Documentos de Pago (JPG, PDF - Máx. 5MB cada uno)
-                </label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                  <input
-                    type="file"
-                    multiple
-                    accept=".jpg,.jpeg,.pdf"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="payment-files"
-                  />
-                  <label htmlFor="payment-files" className="cursor-pointer">
-                    <div className="text-gray-400 mb-2">
-                      <svg className="mx-auto h-12 w-12" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                        <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium text-green-600 hover:text-green-500">
-                        Haz clic para subir
-                      </span>
-                      {' '}o arrastra archivos aquí
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      JPG, PDF hasta 5MB cada uno
-                    </p>
+                              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <BuildingOfficeIcon className="h-4 w-4" />
+                    ID Trabajador (opcional)
                   </label>
-                </div>
-
-                {/* Lista de archivos subidos */}
-                {paymentFiles.length > 0 && (
-                  <div className="mt-4">
-                    <h5 className="text-sm font-medium text-gray-700 mb-2">Archivos subidos:</h5>
-                    <div className="space-y-2">
-                      {paymentFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <div className="flex items-center">
-                            <div className="text-sm text-gray-900">{file.name}</div>
-                            <div className="text-xs text-gray-500 ml-2">
-                              ({(file.size / 1024 / 1024).toFixed(2)} MB)
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveFile(index)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <XMarkIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      <input
+                    type="text"
+                    value={paymentForm.worker_id}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, worker_id: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                      </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <DocumentTextIcon className="h-4 w-4" />
+                    Descripción del Trabajo *
+                    </label>
+                  <textarea
+                    required
+                    value={paymentForm.work_description}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, work_description: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={3}
+                  />
               </div>
 
-              {/* Botones de acción */}
-              <div className="flex justify-end space-x-3">
+                {paymentForm.type === 'hora' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <ClockIcon className="h-4 w-4" />
+                        Horas Trabajadas *
+                  </label>
+                  <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.5"
+                        value={paymentForm.hours || ''}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, hours: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <CurrencyDollarIcon className="h-4 w-4" />
+                        Tarifa por Hora *
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={paymentForm.rate_per_hour || ''}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, rate_per_hour: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {paymentForm.type === 'dia' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <CalendarDaysIcon className="h-4 w-4" />
+                        Días Trabajados *
+                </label>
+                  <input
+                        type="number"
+                        required
+                        min="0"
+                        value={paymentForm.days || ''}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, days: parseInt(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                        <CurrencyDollarIcon className="h-4 w-4" />
+                        Tarifa por Día *
+                  </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        step="0.01"
+                        value={paymentForm.rate_per_day || ''}
+                        onChange={(e) => setPaymentForm({ ...paymentForm, rate_per_day: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                </div>
+                  </>
+                )}
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <DocumentTextIcon className="h-4 w-4" />
+                    Notas (opcional)
+                  </label>
+                  <textarea
+                    value={paymentForm.notes}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    rows={2}
+                  />
+                            </div>
+                          </div>
+
+              {/* Cálculo del total */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-gray-700">Total a Pagar:</span>
+                  <span className="text-2xl font-bold text-blue-600">
+                    Q{paymentForm.type === 'hora' 
+                      ? ((paymentForm.hours || 0) * (paymentForm.rate_per_hour || 0)).toFixed(2)
+                      : ((paymentForm.days || 0) * (paymentForm.rate_per_day || 0)).toFixed(2)
+                    }
+                  </span>
+                        </div>
+              </div>
+
+              <div className="flex gap-3">
                 <button
-                  onClick={() => setShowBulkPaymentModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={handleBulkPayment}
-                  disabled={selectedTicketsForPayment.length === 0}
-                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 font-medium"
                 >
-                  Procesar Pagos ({selectedTicketsForPayment.length})
+                  {editingItem ? 'Actualizar' : 'Crear'} Vale
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         </div>
       )}
     </div>
   )
 }
+

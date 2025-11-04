@@ -17,9 +17,15 @@ class Report(models.Model):
     """Report model for generating various system reports"""
     
     REPORT_TYPES = [
+        ('attendance', 'Asistencias'),
+        ('cupping', 'Cataciones'),
+        ('shipping_weights', 'Pesos de Envío'),
+        ('integrations', 'Integraciones'),
+        ('temperature', 'Temperaturas'),
+        ('occupation', 'Ocupación'),
         ('daily_production', 'Producción Diaria'),
-        ('temperature_summary', 'Resumen de Temperaturas'),
         ('attendance_summary', 'Resumen de Asistencia'),
+        ('temperature_summary', 'Resumen de Temperaturas'),
         ('occupation_summary', 'Resumen de Ocupación'),
         ('lot_progress', 'Progreso de Lotes'),
         ('fermentation_report', 'Reporte de Fermentación'),

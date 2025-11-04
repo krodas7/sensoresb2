@@ -1,6 +1,9 @@
-import React, { lazy, Suspense } from 'react'
+import React, { lazy, Suspense, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { useAuthStore } from './stores/authStore'
+import ProtectedRoute from './components/ProtectedRoute'
+import PWAInstallPrompt from './components/PWAInstallPrompt'
 
 // Eager load critical components
 import Layout from './components/Layout'
@@ -19,6 +22,8 @@ const Cupping = lazy(() => import('./pages/Cupping'))
 const Inventory = lazy(() => import('./pages/Inventory'))
 const Employees = lazy(() => import('./pages/Employees'))
 const Attendance = lazy(() => import('./pages/Attendance'))
+const CherryReception = lazy(() => import('./pages/CherryReception'))
+const Transformation = lazy(() => import('./pages/Transformation'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Logs = lazy(() => import('./pages/Logs'))
 const Users = lazy(() => import('./pages/Users'))
@@ -35,6 +40,25 @@ const PageLoader = () => (
 )
 
 function App() {
+  const { checkAuth, refreshToken, isAuthenticated } = useAuthStore()
+
+  useEffect(() => {
+    checkAuth()
+  }, []) // Solo ejecutar una vez al montar
+
+  // Auto-refresh token cada 10 minutos para mantener la sesión activa
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const interval = setInterval(() => {
+      refreshToken().catch(err => {
+        console.error('Error refreshing token:', err)
+      })
+    }, 10 * 60 * 1000) // 10 minutos
+
+    return () => clearInterval(interval)
+  }, [isAuthenticated, refreshToken])
+
   return (
     <Router
       future={{
@@ -44,10 +68,15 @@ function App() {
     >
       <div className="App">
         <Toaster position="top-right" />
+        <PWAInstallPrompt />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Layout />}>
+            <Route path="/" element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
               <Route index element={<Dashboard />} />
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="temperatures" element={<TemperatureMonitor />} />
@@ -63,6 +92,10 @@ function App() {
               <Route path="inventory" element={<Inventory />} />
               <Route path="employees" element={<Employees />} />
               <Route path="attendance" element={<Attendance />} />
+              <Route path="cherry-reception" element={<CherryReception />} />
+              <Route path="cereza" element={<CherryReception />} /> {/* Alias en español */}
+              <Route path="transformation" element={<Transformation />} />
+              <Route path="transformacion" element={<Transformation />} /> {/* Alias en español */}
               <Route path="reports" element={<Reports />} />
               <Route path="logs" element={<Logs />} />
               <Route path="users" element={<Users />} />
