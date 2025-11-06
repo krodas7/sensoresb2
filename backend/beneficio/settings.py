@@ -74,7 +74,6 @@ LOCAL_APPS = [
     'apps.inventory',
     'apps.gestions',
     'apps.reports',
-    'apps.logs',
     'apps.notifications',
 ]
 
@@ -219,6 +218,27 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False  # Solo en desarrollo, cambiar a False en producción
+CORS_ALLOWED_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+CORS_EXPOSE_HEADERS = ['content-type', 'authorization']
 
 # Channels
 CHANNEL_LAYERS = {

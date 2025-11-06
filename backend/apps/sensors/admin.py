@@ -3,7 +3,7 @@ Admin configuration for sensors
 """
 
 from django.contrib import admin
-from .models import Sensor
+from .models import Sensor, RaspberryPi, Recipiente, Medicion, SensorTemperatura, MedicionTemperatura
 
 
 @admin.register(Sensor)
@@ -29,3 +29,66 @@ class SensorAdmin(admin.ModelAdmin):
         return obj.is_online
     is_online.short_description = 'En Línea'
     is_online.boolean = True
+
+
+@admin.register(RaspberryPi)
+class RaspberryPiAdmin(admin.ModelAdmin):
+    """Raspberry Pi admin"""
+    
+    list_display = ('nombre', 'ip_address', 'ubicacion', 'activa', 'ultima_conexion', 'fecha_creacion')
+    list_filter = ('activa', 'fecha_creacion')
+    search_fields = ('nombre', 'ip_address', 'ubicacion')
+    readonly_fields = ('fecha_creacion', 'ultima_conexion')
+
+
+@admin.register(Recipiente)
+class RecipienteAdmin(admin.ModelAdmin):
+    """Recipiente admin"""
+    
+    list_display = ('nombre', 'tipo', 'raspberry', 'activo', 'pin_trig', 'pin_echo', 'pin_cs')
+    list_filter = ('tipo', 'activo', 'raspberry')
+    search_fields = ('nombre', 'raspberry__nombre')
+    readonly_fields = ('fecha_creacion',)
+    
+    fieldsets = (
+        (None, {'fields': ('raspberry', 'nombre', 'tipo', 'activo')}),
+        ('Sensores de Distancia (HC-SR04)', {
+            'fields': ('pin_trig', 'pin_echo', 'distancia_sensor', 'profundidad', 'distancia_vacia', 'distancia_llena')
+        }),
+        ('Sensores de Temperatura (MAX6675)', {
+            'fields': ('pin_cs', 'spi_bus', 'spi_device', 'temp_min', 'temp_max', 'temp_warning')
+        }),
+        ('Fechas', {'fields': ('fecha_creacion',)}),
+    )
+
+
+@admin.register(Medicion)
+class MedicionAdmin(admin.ModelAdmin):
+    """Medicion admin"""
+    
+    list_display = ('recipiente', 'distancia_cm', 'porcentaje_llenado', 'estado', 'raspberry_ip', 'timestamp')
+    list_filter = ('estado', 'recipiente__tipo', 'timestamp')
+    search_fields = ('recipiente__nombre', 'raspberry_ip')
+    readonly_fields = ('timestamp',)
+    date_hierarchy = 'timestamp'
+
+
+@admin.register(SensorTemperatura)
+class SensorTemperaturaAdmin(admin.ModelAdmin):
+    """Sensor Temperatura admin"""
+    
+    list_display = ('nombre', 'raspberry', 'pin_cs', 'ubicacion', 'activo', 'fecha_creacion')
+    list_filter = ('activo', 'raspberry')
+    search_fields = ('nombre', 'ubicacion', 'raspberry__nombre')
+    readonly_fields = ('fecha_creacion',)
+
+
+@admin.register(MedicionTemperatura)
+class MedicionTemperaturaAdmin(admin.ModelAdmin):
+    """Medicion Temperatura admin"""
+    
+    list_display = ('sensor', 'temperatura', 'estado', 'raspberry_ip', 'timestamp')
+    list_filter = ('estado', 'timestamp')
+    search_fields = ('sensor__nombre', 'raspberry_ip')
+    readonly_fields = ('timestamp',)
+    date_hierarchy = 'timestamp'

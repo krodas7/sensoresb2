@@ -31,13 +31,48 @@ def api_root(request):
             'cherry_reception': '/api/v1/cherry-reception/',
             'transformation': '/api/v1/transformation/',
             'reports': '/api/v1/reports/',
-            'logs': '/api/v1/logs/',
             'notifications': '/api/v1/notifications/',
             'docs': '/api/docs/',
         }
     })
 
+def root(request):
+    """Root endpoint - redirects to API docs"""
+    return JsonResponse({
+        'message': '🌟 Sistema de Beneficio de Café API',
+        'version': '2.0.0',
+        'status': 'active',
+        'description': 'API profesional para la gestión integral de procesos de beneficio de café',
+        'quick_links': {
+            'api_root': '/api/v1/',
+            'swagger_docs': '/api/docs/',
+            'redoc_docs': '/api/redoc/',
+            'admin_panel': '/admin/',
+        },
+        'endpoints': {
+            'health': '/api/v1/health/',
+            'auth': '/api/v1/auth/',
+            'sensors': '/api/v1/sensors/',
+            'areas': '/api/v1/areas/',
+            'temperatures': '/api/v1/temperatures/',
+            'occupation': '/api/v1/occupation/',
+            'lots': '/api/v1/lots/',
+            'fermentation': '/api/v1/fermentation/',
+            'cupping': '/api/v1/cupping/',
+            'employees': '/api/v1/employees/',
+            'attendance': '/api/v1/attendance/',
+            'suppliers': '/api/v1/suppliers/',
+            'cherry_reception': '/api/v1/cherry-reception/',
+            'transformation': '/api/v1/transformation/',
+            'reports': '/api/v1/reports/',
+            'notifications': '/api/v1/notifications/',
+        }
+    })
+
 urlpatterns = [
+    # Root endpoint
+    path('', root, name='root'),
+    
     path('admin/', admin.site.urls),
     
     # API Documentation
@@ -67,10 +102,6 @@ urlpatterns = [
     path('api/v1/reports/', include('apps.reports.urls')),
     path('api/v1/notifications/', include('apps.notifications.urls')),
 ]
-
-# Enable logs URLs if the app is installed (local development)
-if 'apps.logs' in settings.INSTALLED_APPS:
-    urlpatterns.append(path('api/v1/logs/', include('apps.logs.urls')))
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
