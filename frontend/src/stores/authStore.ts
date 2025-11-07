@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+// Use relative URL to leverage Vite proxy in development
+// This avoids CORS issues and ad blockers
+const API_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 interface User {
   id: number
@@ -36,19 +38,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (username: string, password: string) => {
     set({ isLoading: true })
     try {
+      console.log('Attempting login to:', `${API_URL}/auth/login/`)
+      
       const response = await fetch(`${API_URL}/auth/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Include credentials for CORS
         body: JSON.stringify({ username, password }),
       })
       
+      console.log('Login response status:', response.status)
+      console.log('Login response headers:', Object.fromEntries(response.headers.entries()))
+      
       if (!response.ok) {
-        throw new Error('Login failed')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Login failed:', errorData)
+        throw new Error(errorData.message || 'Login failed')
       }
       
       const data = await response.json()
+      console.log('Login successful:', data)
       
       set({
         user: data.user,
@@ -63,7 +74,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Iniciar timer de renovación automática
       get().startTokenRefreshTimer()
     } catch (error) {
+      console.error('Login error details:', error)
       set({ isLoading: false })
+      
+      // Provide more specific error messages
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('No se pudo conectar con el servidor. Verifica que el backend esté corriendo y que no haya bloqueadores de anuncios activos.')
+      }
       throw error
     }
   },

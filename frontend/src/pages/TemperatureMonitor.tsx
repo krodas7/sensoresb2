@@ -20,14 +20,16 @@ interface Sensor {
   id: number
   name: string
   location: string
-  temperature: number
+  temperature: number | null
   humidity?: number
   status: 'online' | 'offline' | 'error'
-  last_reading: string
+  last_reading: string | null
   min_temp: number
   max_temp: number
   alert_threshold: number
-  type: 'PILA' | 'GUARDIOLA'
+  type: 'HORNO' | 'PILA' | 'GUARDIOLA'
+  raspberry?: string
+  raspberry_ip?: string
 }
 
 export default function TemperatureMonitor() {
@@ -44,55 +46,136 @@ export default function TemperatureMonitor() {
     
     if (autoRefresh) {
       const interval = setInterval(() => {
-        setSensors(prevSensors => 
-          prevSensors.map(sensor => ({
-            ...sensor,
-            temperature: sensor.type === 'PILA' 
-              ? 28.0 + Math.random() * 2 
-              : 26.0 + Math.random() * 3,
-            last_reading: new Date().toISOString()
-          }))
-        )
-      }, 5000) // Actualizar cada 5 segundos
+        fetchSensors() // Recargar datos reales del servidor
+      }, 30000) // Actualizar cada 30 segundos (mismo intervalo que las Raspberry Pis)
       return () => clearInterval(interval)
     }
-  }, [autoRefresh])
+  }, [autoRefresh]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lista fija de sensores esperados
+  const getExpectedSensors = (): Sensor[] => {
+    const sensors: Sensor[] = []
+    
+    // 1 Horno
+    sensors.push({
+      id: 0,
+      name: 'Horno',
+      location: 'Horno',
+      temperature: null,
+      status: 'offline',
+      last_reading: null,
+      min_temp: 20,
+      max_temp: 80,
+      alert_threshold: 50,
+      type: 'HORNO'
+    })
+    
+    // 9 Pilas de Secado
+    for (let i = 1; i <= 9; i++) {
+      sensors.push({
+        id: i,
+        name: `Pila de Secado ${i}`,
+        location: `Pila de Secado ${i}`,
+        temperature: null,
+        status: 'offline',
+        last_reading: null,
+        min_temp: 20,
+        max_temp: 80,
+        alert_threshold: 50,
+        type: 'PILA'
+      })
+    }
+    
+    // 4 Guardiolas
+    for (let i = 1; i <= 4; i++) {
+      sensors.push({
+        id: 10 + i,
+        name: `Guardiola ${i}`,
+        location: `Guardiola ${i}`,
+        temperature: null,
+        status: 'offline',
+        last_reading: null,
+        min_temp: 20,
+        max_temp: 80,
+        alert_threshold: 50,
+        type: 'GUARDIOLA'
+      })
+    }
+    
+    return sensors
+  }
 
   const fetchSensors = async () => {
     try {
       setLoading(true)
-      // Simular datos para evitar errores de API
-const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
-  id: i + 1,
-        name: `PILA_${i + 1}`,
-  location: `Pila de Secado ${i + 1}`,
-        temperature: 28.0 + Math.random() * 2,
-        humidity: 45 + Math.random() * 10,
-        status: 'online' as const,
-        last_reading: new Date().toISOString(),
-        min_temp: 20,
-        max_temp: 35,
-        alert_threshold: 30,
-        type: 'PILA' as const
-      }))
-
-      const guardiolaSensors = Array.from({ length: 5 }, (_, i) => ({
-  id: i + 10,
-        name: `GUARDIOLA_${i + 1}`,
-        location: `Guardiola ${i + 1}`,
-        temperature: 26.0 + Math.random() * 3,
-        humidity: 50 + Math.random() * 15,
-        status: 'online' as const,
-        last_reading: new Date().toISOString(),
-        min_temp: 20,
-        max_temp: 35,
-        alert_threshold: 30,
-        type: 'GUARDIOLA' as const
-      }))
-
-      setSensors([...pilaSensors, ...guardiolaSensors])
+      // Llamar al endpoint real de temperaturas
+      const response = await api.get('/sensors/temperatura/resumen/')
+      const data = response.data
+      
+      // Obtener lista fija de sensores esperados
+      const expectedSensors = getExpectedSensors()
+      
+      // Crear un mapa de los datos recibidos por nombre del sensor (normalizado)
+      const dataMap = new Map<string, any>()
+      ;(data.ultimas_mediciones || []).forEach((medicion: any) => {
+        const sensorName = (medicion.sensor || '').trim()
+        dataMap.set(sensorName, medicion)
+        // También agregar variaciones del nombre para mayor flexibilidad
+        if (sensorName.toLowerCase().includes('horno')) {
+          dataMap.set('Horno', medicion)
+        }
+        if (sensorName.toLowerCase().includes('pila') && sensorName.toLowerCase().includes('secado')) {
+          // Extraer número de pila
+          const match = sensorName.match(/\d+/)
+          if (match) {
+            dataMap.set(`Pila de Secado ${match[0]}`, medicion)
+          }
+        }
+        if (sensorName.toLowerCase().includes('guardiola')) {
+          // Extraer número de guardiola
+          const match = sensorName.match(/\d+/)
+          if (match) {
+            dataMap.set(`Guardiola ${match[0]}`, medicion)
+          }
+        }
+      })
+      
+      // Mapear los datos recibidos a los sensores esperados
+      const mappedSensors: Sensor[] = expectedSensors.map((expectedSensor) => {
+        const medicion = dataMap.get(expectedSensor.name) || 
+                        dataMap.get(expectedSensor.name.toLowerCase())
+        
+        if (medicion) {
+          // Determinar el estado basado en el estado del endpoint
+          let status: 'online' | 'offline' | 'error' = 'online'
+          if (medicion.estado === 'ERROR') {
+            status = 'error'
+          } else if (medicion.estado === 'WARNING') {
+            status = 'online' // Mantener online pero mostrará alerta por temperatura
+          }
+          
+          // Convertir temperatura de string a número
+          const temperatura = parseFloat(medicion.temperatura) || null
+          
+          return {
+            ...expectedSensor,
+            temperature: temperatura,
+            status: status,
+            last_reading: medicion.timestamp || null,
+            raspberry: medicion.raspberry || '',
+            raspberry_ip: medicion.raspberry_ip || ''
+          }
+        }
+        
+        // Si no hay datos, mantener el sensor con valores por defecto (offline)
+        return expectedSensor
+      })
+      
+      setSensors(mappedSensors)
     } catch (error) {
       console.error('Error fetching sensors:', error)
+      // En caso de error, mostrar sensores esperados sin datos
+      setSensors(getExpectedSensors())
     } finally {
       setLoading(false)
     }
@@ -153,6 +236,15 @@ const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
     return 'text-green-600'
   }
 
+  const getEstadoColor = (estado: string) => {
+    switch (estado) {
+      case 'OK': return 'bg-green-100 text-green-800'
+      case 'WARNING': return 'bg-yellow-100 text-yellow-800'
+      case 'ERROR': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
   const filteredSensors = sensors.filter(sensor => {
     const matchesSearch = sensor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sensor.location.toLowerCase().includes(searchTerm.toLowerCase())
@@ -162,8 +254,9 @@ const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
 
   const onlineSensors = sensors.filter(sensor => sensor.status === 'online').length
   const totalSensors = sensors.length
-  const averageTemp = sensors.length > 0 ? 
-    (sensors.reduce((sum, sensor) => sum + sensor.temperature, 0) / sensors.length).toFixed(1) : 0
+  const sensorsWithData = sensors.filter(s => s.temperature !== null)
+  const averageTemp = sensorsWithData.length > 0 ? 
+    (sensorsWithData.reduce((sum, sensor) => sum + (sensor.temperature || 0), 0) / sensorsWithData.length).toFixed(1) : 'N/A'
 
   if (loading) {
     return (
@@ -183,12 +276,16 @@ const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
             <h1 className="text-2xl font-bold text-gray-900 mb-2">🌡️ Sensores de Temperatura con Cronómetros</h1>
             <div className="flex items-center gap-4 text-sm">
               <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-red-600 rounded-full"></div>
+                <span className="text-gray-600">HORNO (1)</span>
+              </div>
+              <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
-                <span className="text-gray-600">PILA ({sensors.filter(s => s.type === 'PILA').length})</span>
+                <span className="text-gray-600">PILAS (9)</span>
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                <span className="text-gray-600">GUARDIOLA ({sensors.filter(s => s.type === 'GUARDIOLA').length})</span>
+                <span className="text-gray-600">GUARDIOLAS (4)</span>
               </div>
             </div>
           </div>
@@ -247,7 +344,7 @@ const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Alertas Activas</p>
               <p className="text-2xl font-bold text-gray-900">
-                {sensors.filter(s => s.temperature > s.alert_threshold).length}
+                {sensors.filter(s => s.temperature !== null && s.temperature > s.alert_threshold).length}
               </p>
             </div>
           </div>
@@ -303,69 +400,183 @@ const pilaSensors = Array.from({ length: 9 }, (_, i) => ({
         </div>
             </div>
 
+      {/* Horno */}
+      <div className="mb-8">
+        <div className="flex items-center mb-4">
+          <div className="w-3 h-3 bg-red-600 rounded-full mr-3"></div>
+          <h2 className="text-lg font-semibold text-gray-900">Horno</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredSensors.filter(sensor => sensor.type === 'HORNO').map((sensor) => (
+            <div key={sensor.id} className="bg-red-50 rounded-lg p-4 border border-red-200">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex items-center">
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    sensor.status === 'online' ? 'bg-green-500' : 
+                    sensor.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                  }`}></div>
+                  <span className="font-medium text-gray-900">{sensor.name}</span>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  sensor.temperature === null 
+                    ? 'bg-gray-100 text-gray-800'
+                    : sensor.temperature > sensor.alert_threshold 
+                    ? 'bg-red-100 text-red-800' 
+                    : sensor.temperature > sensor.alert_threshold * 0.8
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {sensor.temperature === null ? 'SIN DATOS' : 
+                   sensor.temperature > sensor.alert_threshold ? 'ALERTA' : 'OK'}
+                </span>
+              </div>
+
+              <div className="text-center">
+                <div className={`text-2xl font-bold mb-1 ${
+                  sensor.temperature === null ? 'text-gray-400' : 'text-gray-900'
+                }`}>
+                  {sensor.temperature !== null ? `${sensor.temperature.toFixed(1)}°C` : 'N/A'}
+                </div>
+                <p className="text-sm text-gray-600 mb-2">{sensor.location}</p>
+                {sensor.last_reading && (
+                  <p className="text-xs text-gray-500">
+                    {new Date(sensor.last_reading).toLocaleString('es-GT', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </p>
+                )}
+                {!sensor.last_reading && (
+                  <p className="text-xs text-gray-400">Sin datos</p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Sensores PILA (1-9) - Pilas de Secado */}
       <div className="mb-8">
         <div className="flex items-center mb-4">
           <div className="w-3 h-3 bg-blue-600 rounded-full mr-3"></div>
-          <h2 className="text-lg font-semibold text-gray-900">Sensores PILA (1-9) - Pilas de Secado</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Pilas de Secado (1-9)</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredSensors.filter(sensor => sensor.type === 'PILA').map((sensor) => (
             <div key={sensor.id} className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    sensor.status === 'online' ? 'bg-green-500' : 
+                    sensor.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                  }`}></div>
                   <span className="font-medium text-gray-900">{sensor.name}</span>
                 </div>
-                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">OK</span>
-        </div>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  sensor.temperature === null 
+                    ? 'bg-gray-100 text-gray-800'
+                    : sensor.temperature > sensor.alert_threshold 
+                    ? 'bg-red-100 text-red-800' 
+                    : sensor.temperature > sensor.alert_threshold * 0.8
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {sensor.temperature === null ? 'SIN DATOS' : 
+                   sensor.temperature > sensor.alert_threshold ? 'ALERTA' : 'OK'}
+                </span>
+              </div>
 
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 mb-1">
-                  {sensor.temperature.toFixed(1)}°C
+                <div className={`text-2xl font-bold mb-1 ${
+                  sensor.temperature === null ? 'text-gray-400' : 'text-gray-900'
+                }`}>
+                  {sensor.temperature !== null ? `${sensor.temperature.toFixed(1)}°C` : 'N/A'}
                 </div>
-                <p className="text-sm text-gray-600">{sensor.location}</p>
-            </div>
+                <p className="text-sm text-gray-600 mb-2">{sensor.location}</p>
+                {sensor.last_reading && (
+                  <p className="text-xs text-gray-500">
+                    {new Date(sensor.last_reading).toLocaleString('es-GT', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </p>
+                )}
+                {!sensor.last_reading && (
+                  <p className="text-xs text-gray-400">Sin datos</p>
+                )}
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Sensores GUARDIOLA (1-5) - Guardiolas */}
+      {/* Sensores GUARDIOLA (1-4) - Guardiolas */}
       <div className="mb-8">
         <div className="flex items-center mb-4">
           <div className="w-3 h-3 bg-orange-500 rounded-full mr-3"></div>
-          <h2 className="text-lg font-semibold text-gray-900">Sensores GUARDIOLA (1-5) - Guardiolas</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Guardiolas (1-4)</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredSensors.filter(sensor => sensor.type === 'GUARDIOLA').map((sensor) => (
             <div key={sensor.id} className="bg-orange-50 rounded-lg p-4 border border-orange-200">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center">
-                  <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                  <div className={`w-2 h-2 rounded-full mr-2 ${
+                    sensor.status === 'online' ? 'bg-green-500' : 
+                    sensor.status === 'error' ? 'bg-red-500' : 'bg-gray-400'
+                  }`}></div>
                   <span className="font-medium text-gray-900">{sensor.name}</span>
                 </div>
-                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">OK</span>
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  sensor.temperature === null 
+                    ? 'bg-gray-100 text-gray-800'
+                    : sensor.temperature > sensor.alert_threshold 
+                    ? 'bg-red-100 text-red-800' 
+                    : sensor.temperature > sensor.alert_threshold * 0.8
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {sensor.temperature === null ? 'SIN DATOS' : 
+                   sensor.temperature > sensor.alert_threshold ? 'ALERTA' : 'OK'}
+                </span>
               </div>
               
               <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 mb-1">
-                  {sensor.temperature.toFixed(1)}°C
+                <div className={`text-2xl font-bold mb-1 ${
+                  sensor.temperature === null ? 'text-gray-400' : 'text-gray-900'
+                }`}>
+                  {sensor.temperature !== null ? `${sensor.temperature.toFixed(1)}°C` : 'N/A'}
                 </div>
-                <p className="text-sm text-gray-600">{sensor.location}</p>
+                <p className="text-sm text-gray-600 mb-2">{sensor.location}</p>
+                {sensor.last_reading && (
+                  <p className="text-xs text-gray-500">
+                    {new Date(sensor.last_reading).toLocaleString('es-GT', {
+                      day: '2-digit',
+                      month: '2-digit',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </p>
+                )}
+                {!sensor.last_reading && (
+                  <p className="text-xs text-gray-400">Sin datos</p>
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {filteredSensors.length === 0 && (
-        <div className="text-center py-12">
-          <SunIcon className="mx-auto h-12 w-12 text-gray-400" />
-          <h3 className="mt-2 text-sm font-medium text-gray-900">No hay sensores de temperatura</h3>
-          <p className="mt-1 text-sm text-gray-500">Comienza creando un nuevo sensor de temperatura.</p>
-        </div>
-      )}
     </div>
   )
 }

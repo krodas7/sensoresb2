@@ -1,0 +1,5 @@
+# Dependencias para el cliente de sensores de guardiolas 1-2
+RPi.GPIO==0.7.1
+requests==2.31.0
+spidev==3.6
+

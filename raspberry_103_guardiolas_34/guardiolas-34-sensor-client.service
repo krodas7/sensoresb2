@@ -1,0 +1,28 @@
+[Unit]
+Description=API Beneficio - Cliente de Sensores de Guardiolas 3-4 Raspberry Pi
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=laptop
+Group=laptop
+WorkingDirectory=/home/laptop/guardiolas_34
+ExecStart=/home/laptop/guardiolas_34/venv/bin/python /home/laptop/guardiolas_34/raspberry_temp_client.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Variables de entorno
+Environment=PYTHONPATH=/home/laptop/guardiolas_34
+Environment=LOG_DIR=/var/log/guardiolas-34
+Environment=PYTHONUNBUFFERED=1
+
+# Configuración de logging
+SyslogIdentifier=guardiolas-34-sensor-client
+
+[Install]
+WantedBy=multi-user.target
+
+

@@ -1,0 +1,3 @@
+# Dependencias para el cliente de sensores de fermentación
+RPi.GPIO==0.7.1
+requests==2.31.0

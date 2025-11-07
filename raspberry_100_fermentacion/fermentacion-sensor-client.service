@@ -1,0 +1,25 @@
+[Unit]
+Description=API Beneficio - Cliente de Sensores de Fermentación Raspberry Pi
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=laptop
+Group=laptop
+WorkingDirectory=/home/laptop/fermentacion
+ExecStart=/home/laptop/fermentacion/venv/bin/python /home/laptop/fermentacion/raspberry_sensor_client.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Variables de entorno
+Environment=PYTHONPATH=/home/laptop/fermentacion
+Environment=PYTHONUNBUFFERED=1
+
+# Configuración de logging
+SyslogIdentifier=fermentacion-sensor-client
+
+[Install]
+WantedBy=multi-user.target

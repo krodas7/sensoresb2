@@ -19,5 +19,5 @@ echo "👥 Initializing roles..."
 python manage.py init_roles
 
 # Start server
-echo "🌐 Starting Django server..."
-python manage.py runserver
+echo "🌐 Starting Django server on 0.0.0.0:8000 (accessible from network)..."
+python manage.py runserver 0.0.0.0:8000

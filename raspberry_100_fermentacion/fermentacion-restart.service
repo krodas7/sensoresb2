@@ -1,0 +1,13 @@
+[Unit]
+Description=Reinicio programado - Cliente de Sensores de Fermentación
+After=fermentacion-sensor-client.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/home/laptop/fermentacion/restart_service.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

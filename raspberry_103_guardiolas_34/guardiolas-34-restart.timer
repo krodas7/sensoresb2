@@ -1,0 +1,14 @@
+[Unit]
+Description=Reinicio programado cada 3 horas - Cliente de Sensores de Guardiolas 3-4
+Requires=guardiolas-34-sensor-client.service
+
+[Timer]
+# Reiniciar cada 3 horas (10800 segundos)
+OnUnitActiveSec=3h
+OnBootSec=10min
+
+# Si el sistema se reinicia, esperar 10 minutos antes del primer reinicio programado
+Persistent=true
+
+[Install]
+WantedBy=timers.target
