@@ -1,8 +1,8 @@
-# ☀️ Raspberry Pi 192.168.0.101 - Pilas de Secado
+# ☀️ Raspberry Pi 192.168.0.104 - Pilas de Secado
 
 ## 📋 Información General
-- **IP**: 192.168.0.101
-- **Función**: Monitoreo de 2 Sensores (Pilas 5 y 6)
+- **IP**: 192.168.0.104
+- **Función**: Monitoreo de 4 sensores (Pilas 1-4)
 - **Tipo de Sensores**: MAX6675 (Temperatura)
 - **Intervalo de Medición**: 30 segundos
 - **API Destino**: http://68.183.155.4:8000
@@ -25,9 +25,18 @@ VCC → Pin 1 (3.3V) o Pin 2 (5V)
 GND → Pin 6 (Ground)
 ```
 
-### Conexiones Individuales por Sensor (2 Sensores)
+### Conexiones Individuales por Sensor (4 Sensores)
 
-#### MAX6675 - Pila de Secado 5
+#### MAX6675 - Pila de Secado 1
+```
+VCC  → Pin 1 (3.3V) o Pin 2 (5V)
+GND  → Pin 6 (Ground)
+SCK  → Pin 23 (GPIO 11) - Compartido
+SO   → Pin 21 (GPIO 9)  - Compartido
+CS   → Pin 8  (GPIO 14) - Chip Select
+```
+
+#### MAX6675 - Pila de Secado 2
 ```
 VCC  → Pin 1 (3.3V) o Pin 2 (5V)
 GND  → Pin 6 (Ground)
@@ -36,13 +45,22 @@ SO   → Pin 21 (GPIO 9)  - Compartido
 CS   → Pin 16 (GPIO 23) - Chip Select
 ```
 
-#### MAX6675 - Pila de Secado 6
+#### MAX6675 - Pila de Secado 3
 ```
 VCC  → Pin 1 (3.3V) o Pin 2 (5V)
 GND  → Pin 6 (Ground)
 SCK  → Pin 23 (GPIO 11) - Compartido
 SO   → Pin 21 (GPIO 9)  - Compartido
 CS   → Pin 22 (GPIO 25) - Chip Select
+```
+
+#### MAX6675 - Pila de Secado 4
+```
+VCC  → Pin 1 (3.3V) o Pin 2 (5V)
+GND  → Pin 6 (Ground)
+SCK  → Pin 23 (GPIO 11) - Compartido
+SO   → Pin 21 (GPIO 9)  - Compartido
+CS   → Pin 24 (GPIO 8)  - Chip Select
 ```
 
 ## 📊 Parámetros de Temperatura
@@ -132,35 +150,35 @@ sudo journalctl -u secado-sensor-client --since "1 hour ago"
 
 ### Prueba de Sensores
 ```bash
-# Ejecutar script base (ajustar según necesidad)
+# Ejecutar script de prueba base
 cd /home/laptop/secado
 python3 test_sensores_simple.py
 
-# Verificar lectura individual de la Pila 5 (GPIO 23)
+# Verificar lectura individual de una pila (ejemplo: Pila 1 - Pin físico 8)
 python3 -c "
 import RPi.GPIO as GPIO
 import spidev
 import time
 
-GPIO.setmode(GPIO.BCM)
+GPIO.setmode(GPIO.BOARD)
 spi = spidev.SpiDev()
 spi.open(0, 0)
 spi.max_speed_hz = 500000
 
-# Probar Pila 5 (GPIO 23)
-GPIO.setup(23, GPIO.OUT)
-GPIO.output(23, GPIO.HIGH)
+# Probar Pila 1 (Pin físico 8)
+GPIO.setup(8, GPIO.OUT)
+GPIO.output(8, GPIO.HIGH)
 time.sleep(0.001)
-GPIO.output(23, GPIO.LOW)
+GPIO.output(8, GPIO.LOW)
 time.sleep(0.001)
 raw = spi.readbytes(2)
-GPIO.output(23, GPIO.HIGH)
+GPIO.output(8, GPIO.HIGH)
 val = (raw[0] << 8) | raw[1]
 if val & 0x0004:
-    print('Pila 5: Termopar abierto')
+    print('Pila 1: Termopar abierto')
 else:
     temp = (val >> 3) * 0.25
-    print(f'Pila 5: {temp}°C')
+    print(f'Pila 1: {temp}°C')
 spi.close()
 GPIO.cleanup()
 "
@@ -175,7 +193,7 @@ sudo nano /etc/dhcpcd.conf
 
 # Agregar al final:
 interface eth0
-static ip_address=192.168.0.101/24
+static ip_address=192.168.0.104/24
 static routers=192.168.0.1
 static domain_name_servers=8.8.8.8 8.8.4.4
 
@@ -280,10 +298,12 @@ def test_sensor_optimizado(cs_pin, name):
     spi.close()
     GPIO.cleanup()
 
-# Probar los sensores configurados (Pilas 5 y 6)
+# Probar los 4 sensores configurados
 sensors = {
-    'Pila 5': 23,
-    'Pila 6': 25,
+    'Pila 1': 8,
+    'Pila 2': 16,
+    'Pila 3': 22,
+    'Pila 4': 24,
 }
 
 for name, cs in sensors.items():
@@ -335,10 +355,10 @@ python3 test_sensores_secado.py
 #### 4. Problemas de red
 ```bash
 # Verificar conectividad
-ping 68.183.155.4
+ping 192.168.0.150
 
 # Verificar DNS
-nslookup 68.183.155.4
+nslookup 192.168.0.150
 
 # Verificar firewall
 sudo ufw status
@@ -359,19 +379,19 @@ dmesg | grep spi
 ## 📈 Monitoreo
 
 ### Dashboard Web
-- **URL**: http://68.183.155.4:8000/dashboard/mejorado/
+- **URL**: http://192.168.0.150:8000/dashboard/mejorado/
 - **Usuario**: laptop
 - **Contraseña**: beneficiob2
 
 ### API Endpoints
-- **Resumen**: http://68.183.155.4:8000/api/temperatura/resumen/
-- **Estadísticas**: http://68.183.155.4:8000/api/temperatura/estadisticas/
-- **Recibir datos**: http://68.183.155.4:8000/api/temperatura/recibir/
+- **Resumen**: http://192.168.0.150:8000/api/temperatura/resumen/
+- **Estadísticas**: http://192.168.0.150:8000/api/temperatura/estadisticas/
+- **Recibir datos**: http://192.168.0.150:8000/api/temperatura/recibir/
 
 ### Verificación Remota
 ```bash
 # Desde el servidor, verificar datos
-curl -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/resumen/ | jq '.[] | select(.sensor | contains("Secado"))'
+curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/resumen/ | jq '.[] | select(.sensor | contains("Secado"))'
 ```
 
 ## 🔧 Configuración Avanzada
@@ -419,7 +439,7 @@ sudo nano /etc/logrotate.d/secado
 ### Información de Contacto
 - **Sistema**: API Beneficio - Pilas de Secado
 - **Raspberry Pi**: 192.168.0.101
-- **Servidor API**: 68.183.155.4:8000
+- **Servidor API**: 192.168.0.150:8000
 - **Tipo de Sensores**: MAX6675 (Temperatura)
 
 ### Archivos Importantes
@@ -443,13 +463,13 @@ sudo journalctl -u secado-sensor-client --since "today" | tail -100
 ## 🚀 Mejoras Implementadas
 
 ### Configuración Optimizada
-- **2 sensores** dedicados (Pilas 5 y 6)
+- **4 sensores** (Pilas 1-4) dedicados
 - **Pines GPIO optimizados** para evitar conflictos
 - **SPI independiente** por sensor para máxima estabilidad
 - **Método probado** basado en test_sensores_simple.py
 
 ### Pines Seleccionados
-- **GPIO 23, 25**: Pines asignados para CS (Pilas 5 y 6)
+- **Pin físico 8, 16, 22, 24** (GPIO 14, 23, 25, 8): Pines asignados para CS
 - **Evita pines problemáticos**: GPIO 15 (UART), GPIO 18 (PWM)
 
 ### Ventajas de la Nueva Configuración
@@ -460,6 +480,6 @@ sudo journalctl -u secado-sensor-client --since "today" | tail -100
 5. **Escalabilidad** - Fácil agregar más sensores si es necesario
 
 ### Scripts de Prueba Disponibles
-- `test_sensores_simple.py` - Prueba rápida de lectura
+- `test_sensores_simple.py` - Prueba base (ajustar pines según configuración)
 - `test_sensores_multiple_simple.py` - Prueba con múltiples lecturas
 - `diagnostico_conexiones.py` - Diagnóstico de problemas de conexión

@@ -1,5 +1,5 @@
 [Unit]
-Description=API Beneficio - Cliente de Sensores de Guardiolas 1-2 Raspberry Pi
+Description=API Beneficio - Cliente de Sensores de Guardiolas 1-2 y Pilas 7-9 Raspberry Pi
 After=network.target
 Wants=network.target
 

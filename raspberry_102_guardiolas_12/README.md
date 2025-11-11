@@ -1,11 +1,11 @@
-# 🌡️ Raspberry Pi 192.168.0.102 - Guardiolas 1 y 2
+# 🌡️ Raspberry Pi 192.168.0.102 - Guardiolas 1-2 y Pilas 7-9
 
 ## 📋 Información General
 - **IP**: 192.168.0.102
-- **Función**: Monitoreo de temperatura de 2 Guardiolas
+- **Función**: Monitoreo de temperatura de Guardiolas 1 y 2, y Pilas de Secado 7, 8 y 9
 - **Tipo de Sensores**: MAX6675 (Termopar K)
 - **Intervalo de Medición**: 30 segundos
-- **API Destino**: http://192.168.0.150:8000
+- **API Destino**: http://68.183.155.4:8000
 - **Usuario**: laptop
 - **Reinicio Automático**: Cada 3 horas
 
@@ -29,9 +29,36 @@ SO  → Pin 21 (GPIO9)  - MISO (compartido)
 CS  → Pin 26 (GPIO7)  - Chip Select
 ```
 
+### MAX6675 - Pila de Secado 7
+```
+VCC → Pin 1 (3.3V) o Pin 2 (5V)
+GND → Pin 6 (Ground)
+SCK → Pin 23 (GPIO11) - Clock SPI
+SO  → Pin 21 (GPIO9)  - MISO
+CS  → Pin 11 (GPIO17) - Chip Select
+```
+
+### MAX6675 - Pila de Secado 8
+```
+VCC → Pin 1 (3.3V) o Pin 2 (5V)
+GND → Pin 6 (Ground)
+SCK → Pin 23 (GPIO11) - Clock SPI (compartido)
+SO  → Pin 21 (GPIO9)  - MISO (compartido)
+CS  → Pin 13 (GPIO27) - Chip Select
+```
+
+### MAX6675 - Pila de Secado 9
+```
+VCC → Pin 1 (3.3V) o Pin 2 (5V)
+GND → Pin 6 (Ground)
+SCK → Pin 23 (GPIO11) - Clock SPI (compartido)
+SO  → Pin 21 (GPIO9)  - MISO (compartido)
+CS  → Pin 15 (GPIO22) - Chip Select
+```
+
 ### Conexiones Compartidas
-- **VCC, GND, SCK, SO**: Se comparten entre ambos sensores
-- **CS**: Cada sensor tiene su propio pin CS (GPIO8 y GPIO7)
+- **VCC, GND, SCK, SO**: Se comparten entre todos los sensores
+- **CS**: Cada sensor tiene su propio pin CS (GPIO8, GPIO7, GPIO17, GPIO27, GPIO22)
 
 ## 🛠️ Instalación
 
@@ -135,16 +162,16 @@ python raspberry_temp_client.py
 ### 1. Verificar Conexión a la API
 ```bash
 # Probar conectividad con el servidor
-ping 192.168.0.150
+ping 68.183.155.4
 
 # Probar endpoint de la API
-curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/estadisticas/
+curl -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/estadisticas/
 ```
 
 ### 2. Verificar Sensores
 ```bash
 # Ver logs del cliente
-tail -f /home/pi/api-beneficio/raspberry_102_guardiolas_12/guardiolas_12_temp_client.log
+tail -f /var/log/guardiolas-12/guardiolas_12_temp_client.log
 
 # Los logs deben mostrar:
 # - Configuración de SPI
@@ -153,8 +180,8 @@ tail -f /home/pi/api-beneficio/raspberry_102_guardiolas_12/guardiolas_12_temp_cl
 ```
 
 ### 3. Verificar en Dashboard
-- Abrir: http://192.168.0.150:8000/api/dashboard/
-- Verificar que aparezcan "Guardiola 1" y "Guardiola 2"
+- Abrir: http://68.183.155.4:8000/api/dashboard/
+- Verificar que aparezcan "Guardiola 1", "Guardiola 2", "Pila de Secado 7", "Pila de Secado 8" y "Pila de Secado 9"
 - Confirmar que los datos se actualizan cada 30 segundos
 
 ### 4. Probar Sensores Manualmente
@@ -174,9 +201,9 @@ spi.open(0, 0)
 spi.max_speed_hz = 500000
 spi.mode = 0
 
-# Configurar GPIO
+# Configurar GPIO (ajusta el pin según el sensor)
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(8, GPIO.OUT)  # CS Guardiola 1
+GPIO.setup(8, GPIO.OUT)  # CS Guardiola 1 (usa 7, 17, 27 o 22 para los demás)
 
 # Leer sensor
 GPIO.output(8, GPIO.LOW)
@@ -232,10 +259,10 @@ lsmod | grep spi
 ### Error: "Connection refused" a la API
 ```bash
 # Verificar conectividad de red
-ping 192.168.0.150
+ping 68.183.155.4
 
 # Verificar que la API esté funcionando
-curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/estadisticas/
+curl -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/estadisticas/
 ```
 
 ### Sensor no responde / Termopar abierto
@@ -245,7 +272,7 @@ curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/estadistica
 # - GND conectado a Ground
 # - SCK conectado a GPIO11
 # - SO conectado a GPIO9
-# - CS conectado a GPIO8 (Guardiola 1) o GPIO7 (Guardiola 2)
+# - CS conectado a GPIO17 (Pila 7), GPIO27 (Pila 8) o GPIO22 (Pila 9)
 
 # Verificar con multímetro:
 # - VCC debe medir ~3.3V o ~5V respecto a GND
@@ -273,7 +300,7 @@ gpio readall
 sudo journalctl -u guardiolas-12-sensor-client -f
 
 # Logs de la aplicación
-tail -f /home/pi/api-beneficio/raspberry_102_guardiolas_12/guardiolas_12_temp_client.log
+tail -f /var/log/guardiolas-12/guardiolas_12_temp_client.log
 ```
 
 ### Estado de los Sensores
@@ -289,7 +316,7 @@ gpio readall
 ### Monitoreo de Temperatura
 ```bash
 # Ver temperaturas en tiempo real
-watch -n 5 'curl -s -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/resumen/ | python3 -m json.tool'
+watch -n 5 'curl -s -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/resumen/ | python3 -m json.tool'
 ```
 
 ## 🔄 Actualizaciones
@@ -402,6 +429,6 @@ lsmod | grep spi
 
 ---
 
-**¡Sistema listo para monitorear la temperatura de las Guardiolas 1 y 2!** 🌡️
+**¡Sistema listo para monitorear la temperatura de las Guardiolas 1-2 y Pilas de Secado 7-9!** 🌡️
 
 

@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  ChartBarIcon, 
   SunIcon, 
   UserGroupIcon,
   CubeIcon,
-  TruckIcon,
   BeakerIcon,
   ClockIcon,
   CheckCircleIcon,
@@ -61,7 +59,6 @@ interface ActiveSupervisor {
     name: string
     shift_type: string
     phone: string
-    email: string
     is_active: boolean
   } | null
   shift_type: string
@@ -81,6 +78,8 @@ export default function Dashboard() {
   })
   const [sensors, setSensors] = useState<SensorData[]>([])
   const [loading, setLoading] = useState(true)
+  const [isInitialLoad, setIsInitialLoad] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [activeWeighing, setActiveWeighing] = useState<ActiveWeighingData | null>(null)
   const [activeSupervisor, setActiveSupervisor] = useState<ActiveSupervisor | null>(null)
 
@@ -184,27 +183,30 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      setLoading(true)
-      
-      // Obtener datos de temperaturas del endpoint real
-      let temperatureData = null
-      try {
-        const tempResponse = await api.get('/sensors/temperatura/resumen/')
-        temperatureData = tempResponse.data
-      } catch (error) {
-        console.error('Error fetching temperature data:', error)
+      if (isInitialLoad) {
+        setLoading(true)
       }
-      
-      // Obtener lista fija de sensores esperados
+
       const expectedSensors = getExpectedSensors()
-      
-      // Crear un mapa de los datos recibidos por nombre del sensor (normalizado)
+
+      const [temperatureResponse, metricsResponse] = await Promise.all([
+        api.get('/sensors/temperatura/resumen/').catch(error => {
+          console.error('Error fetching temperature data:', error)
+          return null
+        }),
+        api.get('/dashboard/comprehensive/').catch(error => {
+          console.error('Error fetching dashboard metrics:', error)
+          return null
+        })
+      ])
+
+      const temperatureData = temperatureResponse?.data
+
       const dataMap = new Map<string, any>()
       if (temperatureData && temperatureData.ultimas_mediciones) {
         temperatureData.ultimas_mediciones.forEach((medicion: any) => {
           const sensorName = (medicion.sensor || '').trim()
           dataMap.set(sensorName, medicion)
-          // También agregar variaciones del nombre para mayor flexibilidad
           if (sensorName.toLowerCase().includes('horno')) {
             dataMap.set('Horno', medicion)
           }
@@ -222,32 +224,27 @@ export default function Dashboard() {
           }
         })
       }
-      
-      // Mapear los datos recibidos a los sensores esperados
+
       const mappedSensors: SensorData[] = expectedSensors.map((expectedSensor) => {
-        const medicion = dataMap.get(expectedSensor.name) || 
-                        dataMap.get(expectedSensor.name.toLowerCase())
-        
+        const medicion = dataMap.get(expectedSensor.name) || dataMap.get(expectedSensor.name.toLowerCase())
+
         if (medicion) {
-          // Determinar el estado basado en el estado del endpoint
           let status: 'online' | 'offline' | 'error' = 'online'
           if (medicion.estado === 'ERROR') {
             status = 'error'
           } else if (medicion.estado === 'WARNING') {
             status = 'online'
           }
-          
-          // Convertir temperatura de string a número
+
           const temperatura = parseFloat(medicion.temperatura) || null
-          
-          // Formatear fecha/hora del último dato
+
           let lastReading: string | null = null
           if (medicion.timestamp) {
             const date = new Date(medicion.timestamp)
             const now = new Date()
             const diffMs = now.getTime() - date.getTime()
             const diffMins = Math.floor(diffMs / 60000)
-            
+
             if (diffMins < 1) {
               lastReading = 'Hace menos de 1 min'
             } else if (diffMins < 60) {
@@ -257,43 +254,63 @@ export default function Dashboard() {
               lastReading = `Hace ${diffHours} h`
             }
           }
-          
+
           return {
             ...expectedSensor,
             temperature: temperatura,
-            status: status,
-            lastReading: lastReading
+            status,
+            lastReading
           }
         }
-        
-        // Si no hay datos, mantener el sensor con valores por defecto (offline)
+
         return expectedSensor
       })
-      
+
       setSensors(mappedSensors)
-      
-      // Calcular estadísticas
+
       const sensorsWithData = mappedSensors.filter(s => s.temperature !== null)
       const onlineSensors = mappedSensors.filter(s => s.status === 'online').length
-      const averageTemp = sensorsWithData.length > 0 
+      const averageTemp = sensorsWithData.length > 0
         ? sensorsWithData.reduce((sum, s) => sum + (s.temperature || 0), 0) / sensorsWithData.length
         : 0
-      
-      // Actualizar estadísticas (mantener otras estadísticas como están por ahora)
-      setStats({
-        totalLots: 24,
-        activeSensors: onlineSensors,
-        totalEmployees: 12,
-        completedProcesses: 156,
-        averageTemperature: averageTemp,
-        systemUptime: 99.9
-      })
+
+      const metricsData = metricsResponse?.data
+      const productionLots = metricsData?.production?.lots
+      const equipmentSensors = metricsData?.equipment?.sensors
+      const operationalEmployees = metricsData?.operational?.employees
+      const operationalTemperatures = metricsData?.operational?.temperatures
+
+      const totalLots = productionLots?.total_lots ?? 0
+      const completedProcesses = productionLots?.completed_lots ?? productionLots?.total_lots ?? 0
+      const activeSensorsCount = equipmentSensors?.active_sensors ?? onlineSensors
+      const totalEmployees = operationalEmployees?.total_employees ?? 0
+      const averageTemperatureMetric = operationalTemperatures?.avg_temp
+      const averageTemperatureValue = Number.isFinite(Number(averageTemperatureMetric))
+        ? Number(averageTemperatureMetric)
+        : averageTemp
+
+      setStats(prev => ({
+        ...prev,
+        totalLots,
+        activeSensors: activeSensorsCount,
+        totalEmployees,
+        completedProcesses,
+        averageTemperature: Number.isFinite(averageTemperatureValue)
+          ? Number(averageTemperatureValue.toFixed(2))
+          : 0
+      }))
+
+      if (metricsData?.timestamp) {
+        setLastUpdated(metricsData.timestamp)
+      } else {
+        setLastUpdated(new Date().toISOString())
+      }
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
-      // En caso de error, mostrar sensores esperados sin datos
       setSensors(getExpectedSensors())
     } finally {
+      setIsInitialLoad(false)
       setLoading(false)
     }
   }
@@ -339,7 +356,9 @@ export default function Dashboard() {
               )}
               <div className="text-right">
                 <div className="text-sm text-gray-500">Última actualización</div>
-                <div className="text-sm font-medium text-gray-900">{new Date().toLocaleTimeString()}</div>
+                <div className="text-sm font-medium text-gray-900">
+                  {lastUpdated ? new Date(lastUpdated).toLocaleTimeString() : '—'}
+                </div>
               </div>
             </div>
           </div>

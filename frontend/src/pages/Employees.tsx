@@ -8,7 +8,6 @@ import {
   XMarkIcon,
   ClockIcon,
   PhoneIcon,
-  EnvelopeIcon,
   IdentificationIcon,
   BriefcaseIcon,
   UserIcon,
@@ -24,7 +23,6 @@ interface Supervisor {
   shift_type: 'turno_a' | 'turno_b'
   shift_type_display: string
   phone: string
-  email: string
   is_active: boolean
   employee_count: number
 }
@@ -68,8 +66,7 @@ export default function Employees() {
   const [supervisorForm, setSupervisorForm] = useState({
     name: '',
     shift_type: 'turno_a' as 'turno_a' | 'turno_b',
-    phone: '',
-    email: ''
+    phone: ''
   })
   const [selectedSupervisor, setSelectedSupervisor] = useState<Supervisor | null>(null)
   
@@ -157,8 +154,7 @@ export default function Employees() {
     setSupervisorForm({
       name: '',
       shift_type: 'turno_a',
-      phone: '',
-      email: ''
+      phone: ''
     })
     setShowSupervisorModal(true)
   }
@@ -824,12 +820,6 @@ export default function Employees() {
                               {supervisor.phone}
                             </span>
                           )}
-                          {supervisor.email && (
-                            <span className="flex items-center gap-1">
-                              <EnvelopeIcon className="h-3 w-3" />
-                              {supervisor.email}
-                            </span>
-                          )}
                         </div>
                       </div>
                     ))
@@ -927,20 +917,6 @@ export default function Employees() {
                     />
                   </div>
 
-              {/* Email */}
-                  <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email (opcional)
-                </label>
-                    <input 
-                  type="email"
-                  value={supervisorForm.email}
-                  onChange={(e) => setSupervisorForm({ ...supervisorForm, email: e.target.value })}
-                  placeholder="Ej: juan.mendez@beneficio.com"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                </div>
-                
               {/* Botones */}
               <div className="flex gap-3 pt-4">
                   <button 

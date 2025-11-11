@@ -1,6 +1,6 @@
 [Unit]
-Description=Reinicio programado cada 3 horas - Cliente de Sensores de Guardiolas 1-2 y Pilas 7-9
-Requires=guardiolas-12-sensor-client.service
+Description=Reinicio programado cada 3 horas - Cliente de Sensores de Secado
+Requires=secado-sensor-client.service
 
 [Timer]
 # Reiniciar cada 3 horas (10800 segundos)

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Script para reiniciar el servicio de guardiolas 1-2 y pilas 7-9 de manera controlada
+# Script para reiniciar el servicio de secado de manera controlada
 # API Beneficio - Sistema de monitoreo automático
 
-SERVICE_NAME="guardiolas-12-sensor-client"
-LOG_FILE="/var/log/guardiolas-12-restart.log"
+SERVICE_NAME="secado-sensor-client"
+LOG_FILE="/var/log/secado-restart.log"
 
 # Función para loggear con timestamp
 log_message() {

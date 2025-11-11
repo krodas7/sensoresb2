@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Script de instalación del servicio de sensores de guardiolas 1-2 para Raspberry Pi
+# Script de instalación del servicio de sensores de guardiolas 1-2 y pilas 7-9 para Raspberry Pi
 # API Beneficio - Sistema de monitoreo automático
 
 set -e
 
-echo "=== Instalador del Cliente de Sensores de Guardiolas 1-2 - API Beneficio ==="
+echo "=== Instalador del Cliente de Sensores de Guardiolas 1-2 y Pilas 7-9 - API Beneficio ==="
 echo ""
 
 # Verificar que estamos en Raspberry Pi
@@ -75,7 +75,7 @@ echo "⚙️  Configurando servicio systemd..."
 # Actualizar el archivo de servicio con la ruta correcta
 cat > "$SERVICE_FILE" << EOF
 [Unit]
-Description=API Beneficio - Cliente de Sensores de Guardiolas 1-2 Raspberry Pi
+Description=API Beneficio - Cliente de Sensores de Guardiolas 1-2 y Pilas 7-9 Raspberry Pi
 After=network.target
 Wants=network.target
 
@@ -144,7 +144,7 @@ echo "🔄 El servicio se reiniciará automáticamente cada 3 horas para preveni
 echo ""
 echo "⚠️  IMPORTANTE: Asegúrate de que:"
 echo "   - Los sensores MAX6675 estén conectados correctamente"
-echo "   - La API esté funcionando en 192.168.0.150:8000"
+echo "   - La API esté funcionando en 68.183.155.4:8000"
 echo "   - La red esté configurada correctamente"
 echo "   - SPI esté habilitado (se configuró automáticamente)"
 echo ""
@@ -152,16 +152,22 @@ echo "🔍 Para verificar que todo funciona:"
 echo "   sudo systemctl start $SERVICE_NAME"
 echo "   sudo journalctl -u $SERVICE_NAME -f"
 echo ""
-echo "📡 Conexiones MAX6675 para Guardiolas 1-2:"
+echo "📡 Conexiones MAX6675:"
 echo "   - VCC: Pin 1 (3.3V) o Pin 2 (5V)"
 echo "   - GND: Pin 6 (Ground)"
 echo "   - SCK: Pin 23 (GPIO 11) - Clock SPI"
 echo "   - SO:  Pin 21 (GPIO 9)  - MISO"
 echo "   - CS:  Pin 24 (GPIO 8)  - Guardiola 1"
 echo "   - CS:  Pin 26 (GPIO 7)  - Guardiola 2"
+echo "   - CS:  Pin 11 (GPIO 17) - Pila 7"
+echo "   - CS:  Pin 13 (GPIO 27) - Pila 8"
+echo "   - CS:  Pin 15 (GPIO 22) - Pila 9"
 echo ""
 echo "🌡️  Sensores configurados:"
 echo "   - Guardiola 1 (CS: GPIO 8)"
 echo "   - Guardiola 2 (CS: GPIO 7)"
+echo "   - Pila 7 (CS: GPIO 17)"
+echo "   - Pila 8 (CS: GPIO 27)"
+echo "   - Pila 9 (CS: GPIO 22)"
 
 

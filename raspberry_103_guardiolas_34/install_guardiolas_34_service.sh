@@ -144,7 +144,7 @@ echo "🔄 El servicio se reiniciará automáticamente cada 3 horas para preveni
 echo ""
 echo "⚠️  IMPORTANTE: Asegúrate de que:"
 echo "   - Los sensores MAX6675 estén conectados correctamente"
-echo "   - La API esté funcionando en 192.168.0.150:8000"
+echo "   - La API esté funcionando en 68.183.155.4:8000"
 echo "   - La red esté configurada correctamente"
 echo "   - SPI esté habilitado (se configuró automáticamente)"
 echo ""

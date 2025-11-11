@@ -6,7 +6,7 @@ from .models import Employee, Shift, ShiftAssignment, Supervisor
 class SupervisorAdmin(admin.ModelAdmin):
     list_display = ('name', 'shift_type', 'phone', 'is_active', 'get_employee_count')
     list_filter = ('is_active', 'shift_type')
-    search_fields = ('name', 'email', 'phone')
+    search_fields = ('name', 'phone')
     
     def get_employee_count(self, obj):
         return obj.employees.filter(is_active=True).count()

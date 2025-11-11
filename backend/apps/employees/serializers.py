@@ -8,7 +8,7 @@ class SupervisorSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Supervisor
-        fields = ['id', 'name', 'shift_type', 'shift_type_display', 'phone', 'email', 'is_active', 'employee_count', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'shift_type', 'shift_type_display', 'phone', 'is_active', 'employee_count', 'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_employee_count(self, obj):

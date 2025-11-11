@@ -5,7 +5,7 @@
 - **Función**: Monitoreo de temperatura de 2 Guardiolas
 - **Tipo de Sensores**: MAX6675 (Termopar K)
 - **Intervalo de Medición**: 30 segundos
-- **API Destino**: http://192.168.0.150:8000
+- **API Destino**: http://68.183.155.4:8000
 - **Usuario**: laptop
 - **Reinicio Automático**: Cada 3 horas
 
@@ -135,10 +135,10 @@ python raspberry_temp_client.py
 ### 1. Verificar Conexión a la API
 ```bash
 # Probar conectividad con el servidor
-ping 192.168.0.150
+ping 68.183.155.4
 
 # Probar endpoint de la API
-curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/estadisticas/
+curl -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/estadisticas/
 ```
 
 ### 2. Verificar Sensores
@@ -153,7 +153,7 @@ tail -f /home/pi/api-beneficio/raspberry_103_guardiolas_34/guardiolas_34_temp_cl
 ```
 
 ### 3. Verificar en Dashboard
-- Abrir: http://192.168.0.150:8000/api/dashboard/
+- Abrir: http://68.183.155.4:8000/api/dashboard/
 - Verificar que aparezcan "Guardiola 3" y "Guardiola 4"
 - Confirmar que los datos se actualizan cada 30 segundos
 
@@ -232,10 +232,10 @@ lsmod | grep spi
 ### Error: "Connection refused" a la API
 ```bash
 # Verificar conectividad de red
-ping 192.168.0.150
+ping 68.183.155.4
 
 # Verificar que la API esté funcionando
-curl -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/estadisticas/
+curl -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/estadisticas/
 ```
 
 ### Sensor no responde / Termopar abierto
@@ -289,7 +289,7 @@ gpio readall
 ### Monitoreo de Temperatura
 ```bash
 # Ver temperaturas en tiempo real
-watch -n 5 'curl -s -u laptop:beneficiob2 http://192.168.0.150:8000/api/temperatura/resumen/ | python3 -m json.tool'
+watch -n 5 'curl -s -u laptop:beneficiob2 http://68.183.155.4:8000/api/temperatura/resumen/ | python3 -m json.tool'
 ```
 
 ## 🔄 Actualizaciones

@@ -1,5 +1,5 @@
 [Unit]
-Description=Reinicio programado - Cliente de Sensores de Guardiolas 1-2
+Description=Reinicio programado - Cliente de Sensores de Guardiolas 1-2 y Pilas 7-9
 After=guardiolas-12-sensor-client.service
 
 [Service]

@@ -3,7 +3,7 @@
 Cliente de sensores de temperatura para Raspberry Pi - Pilas de Secado
 API Beneficio - Sistema de monitoreo automático
 Raspberry Pi: 192.168.0.101
-Sensores: 9 Pilas de Secado (MAX6675)
+Sensores: Pilas de Secado 5 y 6 (MAX6675)
 """
 
 import RPi.GPIO as GPIO
@@ -20,6 +20,14 @@ import socket
 # Configurar directorio de logs
 import os
 log_dir = os.environ.get('LOG_DIR', '/var/log/secado')
+# Crear directorio de logs si no existe
+try:
+    os.makedirs(log_dir, exist_ok=True)
+except PermissionError:
+    fallback_dir = os.path.expanduser("~/logs/secado")
+    os.makedirs(fallback_dir, exist_ok=True)
+    print(f"[secado-temp-client] Advertencia: no se pudo crear {log_dir}, usando {fallback_dir}")
+    log_dir = fallback_dir
 log_file = os.path.join(log_dir, 'secado_temp_client.log')
 
 logging.basicConfig(
@@ -35,16 +43,15 @@ logger = logging.getLogger(__name__)
 # Configurar el modo de numeración de pines
 GPIO.setmode(GPIO.BCM)
 
-# === Configuración de sensores MAX6675 - 3 sensores realmente conectados ===
-# Pines físicos de Raspberry Pi 4 Model B - Solo sensores físicamente conectados
+# === Configuración de sensores MAX6675 - Pilas 5 y 6 ===
+# Pines físicos de Raspberry Pi 4 Model B - Sensores conectados
 SENSORES_TEMP = {
-    "Horno": {"CS": 14, "bus": 0, "device": 0},              # Pin físico 8 - GPIO 14
-    "Pila de Secado 5": {"CS": 23, "bus": 0, "device": 1},   # Pin físico 16 - GPIO 23
-    "Pila de Secado 6": {"CS": 25, "bus": 0, "device": 2}    # Pin físico 22 - GPIO 25
+    "Pila de Secado 5": {"CS": 23, "bus": 0, "device": 0},  # Pin físico 16 - GPIO 23
+    "Pila de Secado 6": {"CS": 25, "bus": 0, "device": 1},  # Pin físico 22 - GPIO 25
 }
 
 # === Configuración de la API ===
-API_BASE_URL = "http://192.168.0.150:8000"  # IP del servidor sensoresb2
+API_BASE_URL = "http://68.183.155.4:8000"  # IP del servidor sensoresb2
 API_ENDPOINT = f"{API_BASE_URL}/api/v1/sensors/temperatura/recibir/"  # Endpoint para temperatura
 API_USERNAME = "laptop"
 API_PASSWORD = "beneficiob2"
@@ -208,7 +215,7 @@ def main():
     """Función principal del programa"""
     logger.info("Iniciando cliente de sensores de pilas de secado para API de Beneficio")
     logger.info(f"Enviando datos cada {INTERVALO_MEDICION} segundos a {API_ENDPOINT}")
-    logger.info(f"Raspberry Pi: 192.168.0.101 - Pilas de Secado")
+    logger.info("Raspberry Pi: 192.168.0.101 - Pilas de Secado 5-6")
     logger.info("Usando método exitoso: SPI independiente por sensor")
     
     try:

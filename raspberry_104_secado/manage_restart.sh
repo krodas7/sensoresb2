@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# Script para gestionar el reinicio programado del servicio de guardiolas 1-2 y pilas 7-9
+# Script para gestionar el reinicio programado del servicio de secado
 # API Beneficio - Sistema de monitoreo automático
 
-SERVICE_NAME="guardiolas-12-sensor-client"
-TIMER_NAME="guardiolas-12-restart.timer"
-RESTART_SERVICE_NAME="guardiolas-12-restart.service"
+SERVICE_NAME="secado-sensor-client"
+TIMER_NAME="secado-restart.timer"
+RESTART_SERVICE_NAME="secado-restart.service"
 
 # Colores para output
 RED='\033[0;31m'
@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 
 # Función para mostrar ayuda
 show_help() {
-    echo -e "${BLUE}=== Gestor de Reinicio Programado - API Beneficio (Guardiolas 1-2 y Pilas 7-9) ===${NC}"
+    echo -e "${BLUE}=== Gestor de Reinicio Programado - API Beneficio (Secado) ===${NC}"
     echo ""
     echo "Uso: $0 [comando]"
     echo ""
@@ -59,7 +59,7 @@ check_timer_status() {
 
 # Función para mostrar estado completo
 show_status() {
-    echo -e "${BLUE}=== Estado del Sistema de Guardiolas 1-2 y Pilas 7-9 ===${NC}"
+    echo -e "${BLUE}=== Estado del Sistema de Secado ===${NC}"
     echo ""
     
     echo -e "${YELLOW}Servicio Principal:${NC}"

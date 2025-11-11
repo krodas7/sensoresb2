@@ -11,7 +11,6 @@ class Supervisor(models.Model):
     name = models.CharField(max_length=200, verbose_name='Nombre del Encargado')
     shift_type = models.CharField(max_length=10, choices=SHIFT_CHOICES, verbose_name='Turno')
     phone = models.CharField(max_length=20, blank=True, verbose_name='Teléfono')
-    email = models.EmailField(blank=True, verbose_name='Email')
     is_active = models.BooleanField(default=True, verbose_name='Activo')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

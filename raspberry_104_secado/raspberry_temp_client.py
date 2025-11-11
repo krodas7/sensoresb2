@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Cliente de sensores de temperatura para Raspberry Pi - Guardiolas 3 y 4
+Cliente de sensores de temperatura para Raspberry Pi - Pilas de Secado
 API Beneficio - Sistema de monitoreo automático
-Raspberry Pi: 192.168.0.103
-Sensores: 2 Guardiolas (MAX6675)
+Raspberry Pi: 192.168.0.104
+Sensores: Pilas de Secado 1-4 (MAX6675)
 """
 
 import RPi.GPIO as GPIO
@@ -19,8 +19,16 @@ import socket
 # Configurar logging
 # Configurar directorio de logs
 import os
-log_dir = os.environ.get('LOG_DIR', '/var/log/guardiolas-34')
-log_file = os.path.join(log_dir, 'guardiolas_34_temp_client.log')
+log_dir = os.environ.get('LOG_DIR', '/var/log/secado')
+# Crear directorio de logs si no existe
+try:
+    os.makedirs(log_dir, exist_ok=True)
+except PermissionError:
+    fallback_dir = os.path.expanduser("~/logs/secado")
+    os.makedirs(fallback_dir, exist_ok=True)
+    print(f"[secado-temp-client] Advertencia: no se pudo crear {log_dir}, usando {fallback_dir}")
+    log_dir = fallback_dir
+log_file = os.path.join(log_dir, 'secado_temp_client.log')
 
 logging.basicConfig(
     level=logging.INFO,
@@ -32,19 +40,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configurar el modo de numeración de pines
-GPIO.setmode(GPIO.BCM)
+# Configurar el modo de numeración de pines (BOARD = números físicos)
+GPIO.setmode(GPIO.BOARD)
 
-# === Configuración de sensores MAX6675 ===
-# Conexiones: VCC→3.3V, GND→Ground, SCK→GPIO11, SO→GPIO9, CS→GPIO8/7
+# === Configuración de sensores MAX6675 - Pilas 1-3 ===
+# Claves CS indicadas en números de pin físicos (BOARD)
 SENSORES_TEMP = {
-    "Guardiola 3": {"CS": 8, "bus": 0, "device": 0},    # CS en GPIO 8
-    "Guardiola 4": {"CS": 7, "bus": 0, "device": 1}     # CS en GPIO 7
+    "Pila de Secado 1": {"CS": 8, "bus": 0, "device": 0},    # Pin físico 8  -> GPIO 14
+    "Pila de Secado 2": {"CS": 16, "bus": 0, "device": 1},   # Pin físico 16 -> GPIO 23
+    "Pila de Secado 3": {"CS": 22, "bus": 0, "device": 2},   # Pin físico 22 -> GPIO 25
+    "Pila de Secado 4": {"CS": 24, "bus": 0, "device": 3},   # Pin físico 24 -> GPIO 8
 }
 
 # === Configuración de la API ===
-# API pública del sistema sensoresb2
-API_BASE_URL = "http://68.183.155.4:8000"  # IP pública del servidor sensoresb2
+API_BASE_URL = "http://68.183.155.4:8000"  # IP del servidor sensoresb2
 API_ENDPOINT = f"{API_BASE_URL}/api/v1/sensors/temperatura/recibir/"  # Endpoint para temperatura
 API_USERNAME = "laptop"
 API_PASSWORD = "beneficiob2"
@@ -52,49 +61,44 @@ API_PASSWORD = "beneficiob2"
 # Intervalo entre mediciones (en segundos)
 INTERVALO_MEDICION = 30  # 30 segundos
 
-# Configurar SPI
-spi = None
-
-def setup_spi():
-    """Configurar comunicación SPI para MAX6675"""
-    global spi
-    try:
-        spi = spidev.SpiDev()
-        spi.open(0, 0)  # Bus 0, Device 0
-        spi.max_speed_hz = 500000  # 0.5 MHz es suficiente para MAX6675
-        spi.mode = 0  # CPOL=0, CPHA=0
-        logger.info("✅ SPI configurado correctamente para MAX6675")
-        return True
-    except Exception as e:
-        logger.error(f"❌ Error configurando SPI: {e}")
-        return False
+# Nota: No se usa SPI global - cada sensor tiene su propio SPI (método exitoso)
 
 def leer_temperatura_max6675(cs_pin, bus=0, device=0):
-    """Lee la temperatura del sensor MAX6675"""
+    """Lee la temperatura del sensor MAX6675 usando la lógica exitosa de test_sensores_simple.py"""
     try:
-        # Configurar pin CS como salida
+        # Configurar SPI independiente para cada sensor (método exitoso)
+        spi_temp = spidev.SpiDev()
+        spi_temp.open(0, 0)
+        spi_temp.max_speed_hz = 500000
+        spi_temp.mode = 0
+        
+        # Configurar pin CS
         GPIO.setup(cs_pin, GPIO.OUT)
+        GPIO.output(cs_pin, GPIO.HIGH)  # CS alto por defecto
         
         # Activar CS (bajo)
         GPIO.output(cs_pin, GPIO.LOW)
-        time.sleep(0.001)  # Esperar 1ms
+        time.sleep(0.001)
         
-        # Leer 2 bytes desde SPI
-        raw = spi.readbytes(2)  # [MSB, LSB]
+        # Leer datos
+        raw = spi_temp.readbytes(2)
         
         # Desactivar CS (alto)
         GPIO.output(cs_pin, GPIO.HIGH)
         
-        # Combinar bytes
-        val = (raw[0] << 8) | raw[1]
+        # Cerrar SPI inmediatamente (método exitoso)
+        spi_temp.close()
         
-        # Verificar bit D2 (0x0004) - indica termopar abierto
-        if val & 0x0004:
+        # Procesar datos
+        valor = (raw[0] << 8) | raw[1]
+        
+        # Verificar termopar abierto
+        if valor & 0x0004:
             logger.warning("⚠️ Termopar abierto o desconectado")
             return None
         
-        # Extraer temperatura (bits D15..D3 con resolución 0.25°C)
-        temperatura = (val >> 3) * 0.25
+        # Calcular temperatura
+        temperatura = (valor >> 3) * 0.25
         
         return round(temperatura, 2)
         
@@ -108,6 +112,8 @@ def obtener_mediciones_temperatura():
     
     for nombre, config in SENSORES_TEMP.items():
         try:
+            logger.info(f"--- Midiendo {nombre} (CS={config['CS']}) ---")
+            
             temperatura = leer_temperatura_max6675(
                 config["CS"], 
                 config["bus"], 
@@ -115,11 +121,25 @@ def obtener_mediciones_temperatura():
             )
             
             if temperatura is None:
-                logger.error(f"{nombre}: Error en la lectura")
+                logger.error(f"{nombre}: Error en la lectura - sensor no responde")
                 continue
             
+            # Validar rango de temperatura (-40°C a 200°C es rango válido para MAX6675)
+            if temperatura < -40.0 or temperatura > 200.0:
+                logger.warning(f"{nombre}: Temperatura fuera de rango ({temperatura}°C) - posible error de lectura")
+                # Intentar segunda lectura
+                time.sleep(0.2)
+                temperatura = leer_temperatura_max6675(
+                    config["CS"], 
+                    config["bus"], 
+                    config["device"]
+                )
+                if temperatura is None or temperatura < -40.0 or temperatura > 200.0:
+                    logger.error(f"{nombre}: Segunda lectura también falló - SALTANDO")
+                    continue
+            
             # Determinar estado basado en temperatura
-            if temperatura >= 40.0:
+            if temperatura >= 50.0:
                 estado = "WARNING"
                 logger.warning(f"{nombre}: Temperatura alta detectada: {temperatura}°C")
             elif temperatura <= -10.0:
@@ -134,10 +154,15 @@ def obtener_mediciones_temperatura():
                 "estado": estado
             })
             
-            logger.info(f"{nombre}: Temperatura = {temperatura}°C | Estado = {estado}")
+            logger.info(f"{nombre}: ✅ Temperatura = {temperatura}°C | Estado = {estado}")
             
         except Exception as e:
-            logger.error(f"{nombre}: Error inesperado - {e}")
+            logger.error(f"{nombre}: ❌ Error inesperado - {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        # Pausa entre sensores para evitar interferencias (método exitoso)
+        time.sleep(0.5)
     
     return mediciones
 
@@ -155,7 +180,7 @@ def enviar_datos_a_api(mediciones):
         raspberry_ip = s.getsockname()[0]
         s.close()
     except:
-        raspberry_ip = "192.168.0.103"  # IP de la Raspberry Pi de guardiolas 3-4
+        raspberry_ip = "192.168.0.104"  # IP de la Raspberry Pi de pilas de secado
     
     # Preparar datos para enviar
     datos = {
@@ -175,7 +200,7 @@ def enviar_datos_a_api(mediciones):
         )
         
         if response.status_code == 201:
-            logger.info(f"Datos de guardiolas enviados exitosamente: {response.json()}")
+            logger.info(f"Datos de pilas de secado enviados exitosamente: {response.json()}")
             return True
         else:
             logger.error(f"Error al enviar datos: {response.status_code} - {response.text}")
@@ -190,18 +215,14 @@ def enviar_datos_a_api(mediciones):
 
 def main():
     """Función principal del programa"""
-    logger.info("Iniciando cliente de sensores de guardiolas 3-4 para API de Beneficio")
+    logger.info("Iniciando cliente de sensores de pilas de secado para API de Beneficio")
     logger.info(f"Enviando datos cada {INTERVALO_MEDICION} segundos a {API_ENDPOINT}")
-    logger.info(f"Raspberry Pi: 192.168.0.103 - Guardiolas 3 y 4")
-    
-    # Configurar SPI
-    if not setup_spi():
-        logger.error("No se pudo configurar SPI. Saliendo...")
-        return
+    logger.info(f"Raspberry Pi: 192.168.0.104 - Pilas de Secado 1-4")
+    logger.info("Usando método SPI independiente por sensor")
     
     try:
         while True:
-            logger.info("--- Iniciando ciclo de medición de guardiolas 3-4 ---")
+            logger.info("--- Iniciando ciclo de medición de pilas de secado ---")
             
             # Obtener mediciones
             mediciones = obtener_mediciones_temperatura()
@@ -209,9 +230,9 @@ def main():
             if mediciones:
                 # Enviar datos a la API
                 if enviar_datos_a_api(mediciones):
-                    logger.info("Ciclo de guardiolas 3-4 completado exitosamente")
+                    logger.info("Ciclo de pilas de secado completado exitosamente")
                 else:
-                    logger.warning("Ciclo de guardiolas 3-4 completado con errores en el envío")
+                    logger.warning("Ciclo de pilas de secado completado con errores en el envío")
             else:
                 logger.warning("No se obtuvieron mediciones de temperatura válidas")
             
@@ -225,12 +246,11 @@ def main():
         logger.error(f"Error inesperado en el programa principal: {e}")
     finally:
         logger.info("Finalizando...")
-        # Cerrar SPI
-        if spi:
-            spi.close()
+        # Limpiar GPIO (cada sensor maneja su propio SPI)
         GPIO.cleanup()
 
 if __name__ == "__main__":
     main()
+
 
 

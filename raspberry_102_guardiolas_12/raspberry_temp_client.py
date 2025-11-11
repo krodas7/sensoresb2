@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Cliente de sensores de temperatura para Raspberry Pi - Guardiolas 1 y 2
+Cliente de sensores de temperatura para Raspberry Pi - Guardiolas 1-2 y Pilas 7-9
 API Beneficio - Sistema de monitoreo automático
 Raspberry Pi: 192.168.0.102
-Sensores: 2 Guardiolas (MAX6675)
+Sensores: Guardiolas 1-2 y Pilas de Secado 7, 8 y 9 (MAX6675)
 """
 
 import RPi.GPIO as GPIO
@@ -20,6 +20,13 @@ import socket
 # Configurar directorio de logs
 import os
 log_dir = os.environ.get('LOG_DIR', '/var/log/guardiolas-12')
+try:
+    os.makedirs(log_dir, exist_ok=True)
+except PermissionError:
+    fallback_dir = os.path.expanduser("~/logs/guardiolas-12")
+    os.makedirs(fallback_dir, exist_ok=True)
+    print(f"[guardiolas-12] Advertencia: no se pudo crear {log_dir}, usando {fallback_dir}")
+    log_dir = fallback_dir
 log_file = os.path.join(log_dir, 'guardiolas_12_temp_client.log')
 
 logging.basicConfig(
@@ -35,15 +42,19 @@ logger = logging.getLogger(__name__)
 # Configurar el modo de numeración de pines
 GPIO.setmode(GPIO.BCM)
 
-# === Configuración de sensores MAX6675 ===
-# Conexiones: VCC→3.3V, GND→Ground, SCK→GPIO11, SO→GPIO9, CS→GPIO8/7
+# === Configuración de sensores MAX6675 - Guardiolas y Pilas ===
+# Conexiones: VCC→3.3V, GND→Ground, SCK→GPIO11, SO→GPIO9, CS→GPIO (ver mapa)
 SENSORES_TEMP = {
-    "Guardiola 1": {"CS": 8, "bus": 0, "device": 0},    # CS en GPIO 8
-    "Guardiola 2": {"CS": 7, "bus": 0, "device": 1}     # CS en GPIO 7
+    "Guardiola 1": {"CS": 8, "bus": 0, "device": 0},     # Pin físico 24
+    "Guardiola 2": {"CS": 7, "bus": 0, "device": 1},     # Pin físico 26
+    "Pila de Secado 7": {"CS": 17, "bus": 0, "device": 2},  # Pin físico 11
+    "Pila de Secado 8": {"CS": 27, "bus": 0, "device": 3},  # Pin físico 13
+    "Pila de Secado 9": {"CS": 22, "bus": 0, "device": 4},  # Pin físico 15
 }
 
 # === Configuración de la API ===
-API_BASE_URL = "http://192.168.0.150:8000"  # IP del servidor sensoresb2
+# API pública del sistema sensoresb2
+API_BASE_URL = "http://68.183.155.4:8000"  # IP pública del servidor sensoresb2
 API_ENDPOINT = f"{API_BASE_URL}/api/v1/sensors/temperatura/recibir/"  # Endpoint para temperatura
 API_USERNAME = "laptop"
 API_PASSWORD = "beneficiob2"
@@ -154,7 +165,7 @@ def enviar_datos_a_api(mediciones):
         raspberry_ip = s.getsockname()[0]
         s.close()
     except:
-        raspberry_ip = "192.168.0.102"  # IP de la Raspberry Pi de guardiolas 1-2
+        raspberry_ip = "192.168.0.102"  # IP de la Raspberry Pi de guardiolas y pilas
     
     # Preparar datos para enviar
     datos = {
@@ -189,9 +200,9 @@ def enviar_datos_a_api(mediciones):
 
 def main():
     """Función principal del programa"""
-    logger.info("Iniciando cliente de sensores de guardiolas 1-2 para API de Beneficio")
+    logger.info("Iniciando cliente de sensores de guardiolas 1-2 y pilas 7-9 para API de Beneficio")
     logger.info(f"Enviando datos cada {INTERVALO_MEDICION} segundos a {API_ENDPOINT}")
-    logger.info(f"Raspberry Pi: 192.168.0.102 - Guardiolas 1 y 2")
+    logger.info("Raspberry Pi: 192.168.0.102 - Guardiolas 1-2 y Pilas de Secado 7-9")
     
     # Configurar SPI
     if not setup_spi():
@@ -200,7 +211,7 @@ def main():
     
     try:
         while True:
-            logger.info("--- Iniciando ciclo de medición de guardiolas 1-2 ---")
+            logger.info("--- Iniciando ciclo de medición de guardiolas y pilas ---")
             
             # Obtener mediciones
             mediciones = obtener_mediciones_temperatura()
@@ -208,9 +219,9 @@ def main():
             if mediciones:
                 # Enviar datos a la API
                 if enviar_datos_a_api(mediciones):
-                    logger.info("Ciclo de guardiolas 1-2 completado exitosamente")
+                    logger.info("Ciclo de guardiolas y pilas completado exitosamente")
                 else:
-                    logger.warning("Ciclo de guardiolas 1-2 completado con errores en el envío")
+                    logger.warning("Ciclo de guardiolas y pilas completado con errores en el envío")
             else:
                 logger.warning("No se obtuvieron mediciones de temperatura válidas")
             

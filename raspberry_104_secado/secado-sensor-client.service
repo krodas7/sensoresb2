@@ -1,0 +1,26 @@
+[Unit]
+Description=API Beneficio - Cliente de Sensores de Pilas de Secado (Temperatura)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=laptop
+Group=laptop
+WorkingDirectory=/home/laptop/fermentacion
+ExecStart=/home/laptop/fermentacion/venv/bin/python /home/laptop/fermentacion/raspberry_temp_client.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Variables de entorno
+Environment=PYTHONPATH=/home/laptop/fermentacion
+Environment=LOG_DIR=/var/log/secado
+Environment=PYTHONUNBUFFERED=1
+
+# Configuración de logging
+SyslogIdentifier=secado-sensor-client
+
+[Install]
+WantedBy=multi-user.target
