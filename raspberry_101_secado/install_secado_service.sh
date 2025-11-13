@@ -6,7 +6,7 @@
 set -e
 
 echo "=== Instalador del Cliente de Sensores de Pilas de Secado (Temperatura) - API Beneficio ==="
-echo "📌 Configuración: 2 sensores (Pilas 5-6) con pines optimizados"
+echo "📌 Configuración: 3 sensores (Horno + Pilas 5-6) con pines optimizados"
 echo ""
 
 # Verificar que estamos en Raspberry Pi
@@ -142,15 +142,17 @@ echo "🔍 Para verificar que todo funciona:"
 echo "   sudo systemctl start $SERVICE_NAME"
 echo "   sudo journalctl -u $SERVICE_NAME -f"
 echo ""
-echo "📡 Conexiones MAX6675 para 2 Sensores (Pilas 5-6):"
+echo "📡 Conexiones MAX6675 para 3 Sensores (Horno + Pilas 5-6):"
 echo "   - VCC: Pin 1 (3.3V) o Pin 2 (5V) - Compartido"
 echo "   - GND: Pin 6 (Ground) - Compartido"
 echo "   - SCK: Pin 23 (GPIO 11) - Clock SPI - Compartido"
 echo "   - SO:  Pin 21 (GPIO 9)  - MISO - Compartido"
+echo "   - CS:  Pin 8  (GPIO 14) - Horno"
 echo "   - CS:  Pin 16 (GPIO 23) - Pila 5"
 echo "   - CS:  Pin 22 (GPIO 25) - Pila 6"
 echo ""
 echo "🌡️ Sensores configurados (Temperatura):"
+echo "   - Horno (CS: GPIO 14) - Pin 8"
 echo "   - Pila 5 (CS: GPIO 23) - Pin 16"
 echo "   - Pila 6 (CS: GPIO 25) - Pin 22"
 echo ""

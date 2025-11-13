@@ -2,7 +2,7 @@
 
 ## 📋 Información General
 - **IP**: 192.168.0.101
-- **Función**: Monitoreo de 2 Sensores (Pilas 5 y 6)
+- **Función**: Monitoreo de 3 Sensores (Horno + Pilas 5 y 6)
 - **Tipo de Sensores**: MAX6675 (Temperatura)
 - **Intervalo de Medición**: 30 segundos
 - **API Destino**: http://68.183.155.4:8000
@@ -25,7 +25,16 @@ VCC → Pin 1 (3.3V) o Pin 2 (5V)
 GND → Pin 6 (Ground)
 ```
 
-### Conexiones Individuales por Sensor (2 Sensores)
+### Conexiones Individuales por Sensor (3 Sensores)
+
+#### MAX6675 - Horno
+```
+VCC  → Pin 1 (3.3V) o Pin 2 (5V)
+GND  → Pin 6 (Ground)
+SCK  → Pin 23 (GPIO 11) - Compartido
+SO   → Pin 21 (GPIO 9)  - Compartido
+CS   → Pin 8  (GPIO 14) - Chip Select
+```
 
 #### MAX6675 - Pila de Secado 5
 ```
@@ -136,7 +145,7 @@ sudo journalctl -u secado-sensor-client --since "1 hour ago"
 cd /home/laptop/secado
 python3 test_sensores_simple.py
 
-# Verificar lectura individual de la Pila 5 (GPIO 23)
+# Verificar lectura individual del Horno (GPIO 14)
 python3 -c "
 import RPi.GPIO as GPIO
 import spidev
@@ -147,20 +156,20 @@ spi = spidev.SpiDev()
 spi.open(0, 0)
 spi.max_speed_hz = 500000
 
-# Probar Pila 5 (GPIO 23)
-GPIO.setup(23, GPIO.OUT)
-GPIO.output(23, GPIO.HIGH)
+# Probar Horno (GPIO 14)
+GPIO.setup(14, GPIO.OUT)
+GPIO.output(14, GPIO.HIGH)
 time.sleep(0.001)
-GPIO.output(23, GPIO.LOW)
+GPIO.output(14, GPIO.LOW)
 time.sleep(0.001)
 raw = spi.readbytes(2)
-GPIO.output(23, GPIO.HIGH)
+GPIO.output(14, GPIO.HIGH)
 val = (raw[0] << 8) | raw[1]
 if val & 0x0004:
-    print('Pila 5: Termopar abierto')
+    print('Horno: Termopar abierto')
 else:
     temp = (val >> 3) * 0.25
-    print(f'Pila 5: {temp}°C')
+    print(f'Horno: {temp}°C')
 spi.close()
 GPIO.cleanup()
 "
@@ -443,12 +452,13 @@ sudo journalctl -u secado-sensor-client --since "today" | tail -100
 ## 🚀 Mejoras Implementadas
 
 ### Configuración Optimizada
-- **2 sensores** dedicados (Pilas 5 y 6)
+- **3 sensores** dedicados (Horno + Pilas 5 y 6)
 - **Pines GPIO optimizados** para evitar conflictos
 - **SPI independiente** por sensor para máxima estabilidad
 - **Método probado** basado en test_sensores_simple.py
 
 ### Pines Seleccionados
+- **GPIO 14**: Horno (Pin físico 8)
 - **GPIO 23, 25**: Pines asignados para CS (Pilas 5 y 6)
 - **Evita pines problemáticos**: GPIO 15 (UART), GPIO 18 (PWM)
 

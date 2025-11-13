@@ -43,11 +43,12 @@ logger = logging.getLogger(__name__)
 # Configurar el modo de numeración de pines
 GPIO.setmode(GPIO.BCM)
 
-# === Configuración de sensores MAX6675 - Pilas 5 y 6 ===
+# === Configuración de sensores MAX6675 - Horno + Pilas 5 y 6 ===
 # Pines físicos de Raspberry Pi 4 Model B - Sensores conectados
 SENSORES_TEMP = {
-    "Pila de Secado 5": {"CS": 23, "bus": 0, "device": 0},  # Pin físico 16 - GPIO 23
-    "Pila de Secado 6": {"CS": 25, "bus": 0, "device": 1},  # Pin físico 22 - GPIO 25
+    "Horno": {"CS": 14, "bus": 0, "device": 0},              # Pin físico 8 - GPIO 14
+    "Pila de Secado 5": {"CS": 23, "bus": 0, "device": 1},   # Pin físico 16 - GPIO 23
+    "Pila de Secado 6": {"CS": 25, "bus": 0, "device": 2},   # Pin físico 22 - GPIO 25
 }
 
 # === Configuración de la API ===
