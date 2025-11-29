@@ -1,0 +1,25 @@
+# Archivos de configuración local
+bascula_config.json
+
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+logs/
+
+# Archivos temporales
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+

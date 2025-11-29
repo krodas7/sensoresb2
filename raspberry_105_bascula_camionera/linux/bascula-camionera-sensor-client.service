@@ -1,0 +1,27 @@
+[Unit]
+Description=API Beneficio - Cliente de Báscula Camionera
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=laptop
+Group=laptop
+WorkingDirectory=/home/laptop/bascula_camionera
+ExecStart=/home/laptop/bascula_camionera/venv/bin/python /home/laptop/bascula_camionera/raspberry_bascula_client.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Variables de entorno
+Environment=PYTHONPATH=/home/laptop/bascula_camionera
+Environment=LOG_DIR=/var/log/bascula
+Environment=PYTHONUNBUFFERED=1
+
+# Configuración de logging
+SyslogIdentifier=bascula-camionera-sensor-client
+
+[Install]
+WantedBy=multi-user.target
+

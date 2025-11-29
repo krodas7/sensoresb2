@@ -1,0 +1,7 @@
+# Dependencias para el cliente de báscula - Báscula Camionera
+pyserial==3.5
+requests==2.31.0
+
+# Nota: tkinter viene incluido con Python en Windows
+# En Linux puede necesitarse: sudo apt-get install python3-tk
+
